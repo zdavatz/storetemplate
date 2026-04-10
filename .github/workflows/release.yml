@@ -142,7 +142,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           APP="target/release/StoreTemplate.app"
 
-          APP_IDENTITY=$(security find-identity -v build.keychain | grep "Mac App Distribution\|3rd Party Mac Developer Application" | head -1 | sed 's/.*"\(.*\)"/\1/' || true)
+          APP_IDENTITY=$(security find-identity -v build.keychain | grep "Apple Distribution\|Mac App Distribution\|3rd Party Mac Developer Application" | head -1 | sed 's/.*"\(.*\)"/\1/' || true)
           if [ -n "$APP_IDENTITY" ]; then
             echo "Signing app with: $APP_IDENTITY"
             codesign --force --options runtime \
@@ -248,7 +248,9 @@ jobs:
           APPRUN
           chmod +x AppDir/AppRun
 
-          ln -sf usr/share/icons/hicolor/256x256/apps/storetemplate.png AppDir/storetemplate.png 2>/dev/null || true
+          # Create a minimal placeholder icon (1x1 red PNG)
+          printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' > AppDir/storetemplate.png
+          cp AppDir/storetemplate.png AppDir/usr/share/icons/hicolor/256x256/apps/storetemplate.png
       - name: Build AppImage
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
