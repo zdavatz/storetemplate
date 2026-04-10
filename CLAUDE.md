@@ -54,12 +54,6 @@ openssl pkcs12 -export -out mac_app.p12 -inkey mac_dist.key -in mac_app.pem -pas
 ```
 The `-legacy` flag is required for macOS `security import` compatibility.
 
-### App Store Connect API
-
-- Key ID: `7B9HFNP99B`
-- Issuer ID: `69a6de70-0490-47e3-e053-5b8c7c11a4d1`
-- Key file: `AuthKey_7B9HFNP99B.p8` in iCloud `ywesee/p8/`
-
 ## Key Design Decisions
 
 - Common tab holds all shared fields (name, descriptions, keywords, URLs) — store tabs only have store-unique fields to avoid duplicate entry
