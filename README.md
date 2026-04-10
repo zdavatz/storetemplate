@@ -75,7 +75,14 @@ Required GitHub Secrets:
 
 ### Setting up a new Mac
 
-Import the signing certificates (p12 files) into your Keychain. For Developer ID, use Xcode: Settings > Accounts > ywesee GmbH > Manage Certificates.
+Import the signing certificates into your Keychain:
+
+```bash
+security import /path/to/mac_app_distribution.p12 -k ~/Library/Keychains/login.keychain-db -P "PASSWORD"
+security import /path/to/mac_installer_distribution.p12 -k ~/Library/Keychains/login.keychain-db -P "PASSWORD"
+```
+
+For Developer ID, use Xcode: Settings > Accounts > ywesee GmbH > Manage Certificates.
 
 ## Generated Workflow
 
