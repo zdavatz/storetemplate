@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
+use crate::icon_gen::IconReceiver;
+
 fn empty_lang_map() -> HashMap<String, String> {
     HashMap::new()
 }
 
-#[derive(Default)]
 pub struct AppState {
     // Store selection
     pub store_macos: bool,
@@ -28,6 +31,38 @@ pub struct AppState {
     pub active_tab: Tab,
     pub save_status: Option<String>,
     pub validation_errors: Vec<String>,
+
+    // Icon generation
+    pub icon_gen_receiver: Option<IconReceiver>,
+    pub icon_gen_status: Option<String>,
+
+    // Tracks the last app name we auto-saved under
+    pub last_saved_name: String,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            store_macos: false,
+            store_ios: false,
+            store_windows: false,
+            store_android: false,
+            store_github: false,
+            lang_selected: Vec::new(),
+            active_languages: Vec::new(),
+            common: CommonState::default(),
+            apple: AppleState::default(),
+            google_play: GooglePlayState::default(),
+            microsoft: MicrosoftState::default(),
+            github: GithubState::default(),
+            active_tab: Tab::default(),
+            save_status: None,
+            validation_errors: Vec::new(),
+            icon_gen_receiver: None,
+            icon_gen_status: None,
+            last_saved_name: String::new(),
+        }
+    }
 }
 
 #[derive(Default, PartialEq, Clone, Copy)]
@@ -40,6 +75,8 @@ pub enum Tab {
     GitHub,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct CommonState {
     pub app_name: String,
     pub display_name: String,
@@ -56,6 +93,7 @@ pub struct CommonState {
     pub pricing: usize,
     pub age_rating: usize,
     pub app_icon_path: String,
+    pub icon_description: String,
 }
 
 impl Default for CommonState {
@@ -76,10 +114,13 @@ impl Default for CommonState {
             pricing: 0,
             age_rating: 0,
             app_icon_path: String::new(),
+            icon_description: String::new(),
         }
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppleState {
     pub sku: String,
     pub subtitle: HashMap<String, String>,
@@ -120,6 +161,8 @@ impl Default for AppleState {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct GooglePlayState {
     pub package_name: String,
     pub category: usize,
@@ -158,6 +201,8 @@ impl Default for GooglePlayState {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct MicrosoftState {
     pub msstore_app_id: String,
     pub category: usize,
@@ -202,6 +247,8 @@ impl Default for MicrosoftState {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct GithubState {
     pub tag_pattern: String,
     pub target_branch: String,
@@ -228,6 +275,23 @@ impl Default for GithubState {
             asset_patterns: String::new(),
         }
     }
+}
+
+/// Serializable snapshot of the full app state (excludes transient UI fields).
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavedState {
+    pub store_macos: bool,
+    pub store_ios: bool,
+    pub store_windows: bool,
+    pub store_android: bool,
+    pub store_github: bool,
+    pub lang_selected: Vec<bool>,
+    pub common: CommonState,
+    pub apple: AppleState,
+    pub google_play: GooglePlayState,
+    pub microsoft: MicrosoftState,
+    pub github: GithubState,
 }
 
 impl AppState {
@@ -265,4 +329,97 @@ impl AppState {
     pub fn has_apple(&self) -> bool {
         self.store_macos || self.store_ios
     }
+
+    pub fn to_saved(&self) -> SavedState {
+        SavedState {
+            store_macos: self.store_macos,
+            store_ios: self.store_ios,
+            store_windows: self.store_windows,
+            store_android: self.store_android,
+            store_github: self.store_github,
+            lang_selected: self.lang_selected.clone(),
+            common: serde_json::from_str(&serde_json::to_string(&self.common).unwrap()).unwrap(),
+            apple: serde_json::from_str(&serde_json::to_string(&self.apple).unwrap()).unwrap(),
+            google_play: serde_json::from_str(&serde_json::to_string(&self.google_play).unwrap()).unwrap(),
+            microsoft: serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap(),
+            github: serde_json::from_str(&serde_json::to_string(&self.github).unwrap()).unwrap(),
+        }
+    }
+
+    pub fn load_from_saved(&mut self, saved: SavedState) {
+        self.store_macos = saved.store_macos;
+        self.store_ios = saved.store_ios;
+        self.store_windows = saved.store_windows;
+        self.store_android = saved.store_android;
+        self.store_github = saved.store_github;
+        self.lang_selected = saved.lang_selected;
+        self.common = saved.common;
+        self.apple = saved.apple;
+        self.google_play = saved.google_play;
+        self.microsoft = saved.microsoft;
+        self.github = saved.github;
+        self.update_active_languages();
+    }
+}
+
+/// Get the path for the JSON save dir
+pub fn json_dir() -> std::path::PathBuf {
+    let dir = std::env::current_dir().unwrap_or_default().join("json");
+    if !dir.exists() {
+        let _ = std::fs::create_dir_all(&dir);
+    }
+    dir
+}
+
+/// Build a safe filename from the app name
+fn safe_filename(app_name: &str) -> String {
+    let safe: String = app_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    if safe.is_empty() {
+        "untitled".to_string()
+    } else {
+        safe.to_lowercase()
+    }
+}
+
+/// Auto-save the state to json/<app_name>.json
+pub fn auto_save(state: &AppState) {
+    let name = safe_filename(&state.common.app_name);
+    let path = json_dir().join(format!("{}.json", name));
+    let saved = state.to_saved();
+    if let Ok(json) = serde_json::to_string_pretty(&saved) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+/// Load state from a user-chosen JSON file
+pub fn load_from_file_dialog() -> Option<SavedState> {
+    let start_dir = json_dir();
+    let path = rfd::FileDialog::new()
+        .add_filter("JSON", &["json"])
+        .set_directory(&start_dir)
+        .pick_file()?;
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+/// Try to load the most recently modified JSON file from the json/ dir
+pub fn auto_load_latest() -> Option<SavedState> {
+    let dir = json_dir();
+    let mut entries: Vec<_> = std::fs::read_dir(&dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        .filter_map(|e| {
+            let meta = e.metadata().ok()?;
+            let modified = meta.modified().ok()?;
+            Some((e.path(), modified))
+        })
+        .collect();
+    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    let path = entries.first()?.0.clone();
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
 }

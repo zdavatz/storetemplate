@@ -18,13 +18,15 @@ Built with Rust and [egui](https://github.com/emilk/egui).
 cargo run
 ```
 
-The GUI opens with store checkboxes and language selection at the top. Select your target stores, fill out the Common tab (shared across all stores), then fill in store-specific tabs. Click "Save Template" to export to `{app_name}.json` and auto-generate a `.github/workflows/release.yml` with build jobs for all selected stores.
+The GUI opens with store checkboxes and language selection at the top. Select your target stores, fill out the Common tab (shared across all stores), then fill in store-specific tabs. Click "Save" to export to `{app_name}.json` and auto-generate a `.github/workflows/release.yml` with build jobs for all selected stores.
+
+Form state is auto-saved to the `json/` directory and restored on next launch.
 
 ## What's Covered
 
 Each template includes the maximum metadata supported by each store's API:
 
-- **Common** (filled once, shared by all stores): app name, descriptions (multi-language), keywords, URLs, contact, pricing, age rating
+- **Common** (filled once, shared by all stores): app name, descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
 - **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type
 - **Google Play**: package name (with link to Google Play Console), category, feature graphic, IARC content rating, release track
 - **Microsoft Store**: App ID (with link to Partner Center), "What's new", product features, search terms, store logos, installer config, system requirements
@@ -95,6 +97,21 @@ When saving a template, a `.github/workflows/release.yml` is generated alongside
 - **AppImage** (optional) — `cargo build --release` + `appimagetool` packaging
 - **GitHub Release** — `softprops/action-gh-release`, collects all build artifacts
 
+## AI Icon Generation
+
+Generate app icons directly from a text description using the xAI Grok API. Set your API key:
+
+```bash
+export XAI_API_KEY="your-key-here"
+```
+
+Features:
+- **Generate New Icon** — creates a fresh icon from your description
+- **Iterate on Icon** — sends the current icon + description to refine the design
+- Background is automatically made transparent via post-processing
+- All generated icons are saved in the `png/` directory with timestamps
+- Icon preview displayed inline in the GUI
+
 ## Dependencies
 
 - `eframe` / `egui` — GUI framework
@@ -102,6 +119,9 @@ When saving a template, a `.github/workflows/release.yml` is generated alongside
 - `chrono` — timestamps
 - `rfd` — native file dialogs
 - `open` — open URLs in default browser
+- `reqwest` — HTTP client for Grok API
+- `image` — image processing and background removal
+- `base64` — base64 encoding/decoding
 
 ## License
 

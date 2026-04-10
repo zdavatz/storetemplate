@@ -16,14 +16,15 @@ cargo run            # build and launch GUI
 
 ## Architecture
 
-- `src/main.rs` — eframe entry point, `StoreTemplateApp` struct, top-level render loop with header (store/language checkboxes), tab bar, central scroll area, and footer (save/clear buttons)
-- `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`
+- `src/main.rs` — eframe entry point, `StoreTemplateApp` struct, top-level render loop with header (store/language checkboxes), tab bar, central scroll area, and footer (save/load/clear buttons). Handles icon texture loading, auto-save polling, and app icon for taskbar
+- `src/icon_gen.rs` — AI icon generation via xAI Grok API (`grok-imagine-image` model). Supports new generation and iteration on existing icons via `/images/generations` and `/images/edits` endpoints. Post-processes images to make background transparent. Saves icons to `png/` directory
+- `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`. `SavedState` for JSON serialization. Auto-save/load functions for `json/` directory
 - `src/widgets.rs` — reusable form widget helpers: `text_field`, `multiline_field`, `choice_field`, `bool_field`, `list_field`, `path_field`, `url_field`, `email_field`, `per_language_text`, `per_language_multiline`, `per_language_list`
 - `src/languages.rs` — `LANGUAGES` constant (20 ISO codes with display names)
 - `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog and also generates `.github/workflows/release.yml`
 - `src/workflow.rs` — `build_workflow()` generates GitHub Actions release workflow YAML based on selected stores (build jobs for macOS/iOS/Windows/Android/AppImage + create-release job)
 - `src/stores/mod.rs` — module registry
-- `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating)
+- `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating, icon description field, generate/iterate icon buttons, icon preview)
 - `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS)
 - `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
 - `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
@@ -64,6 +65,11 @@ The `-legacy` flag is required for macOS `security import` compatibility.
 - Store-specific fields include direct links to open the relevant store console in the browser (App Store Connect, Google Play Console, Partner Center)
 - SKU auto-suggested from app name (lowercase, special chars replaced with underscores)
 - Save generates both JSON template and `.github/workflows/release.yml` with build jobs matching selected stores
+- Auto-save to `json/<app_name>.json` every ~2 seconds and on exit; auto-loads most recent on startup
+- Load button opens file picker for `json/` directory to restore any saved state
+- AI icon generation via xAI Grok API with background transparency post-processing; icons saved to `png/` with timestamps
+- Iterate on existing icon by sending current image to the Grok edit endpoint
+- App icon loaded from `png/Storetemplate_icon_1775851683.png` for taskbar/dock display
 - Widget ID clashes resolved via `ui.push_id()` for macOS/iOS sections and `from_id_salt(label)` for ComboBoxes
 
 ## License
