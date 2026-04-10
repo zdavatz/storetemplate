@@ -29,6 +29,37 @@ cargo run            # build and launch GUI
 - `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
 - `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, build AppImage option, asset patterns)
 
+## macOS Build & Release Infrastructure
+
+- `macos/Info.plist` — App bundle metadata (bundle ID: `com.ywesee.storetemplate`, team: `4B37356EGR`)
+- `macos/entitlements-appstore.plist` — App Store entitlements (sandbox, file access, network)
+- `macos/entitlements-devid.plist` — Developer ID entitlements (JIT, unsigned memory, library validation)
+- `macos/build-appstore.sh` — Local script for App Store .pkg build and upload
+- `macos/build-notarized-dmg.sh` — Local script for notarized DMG build
+- `.github/workflows/release.yml` — CI pipeline: universal binary, signing, notarization, App Store upload, Windows ZIP, Linux AppImage
+
+### Signing Identities
+
+- `Developer ID Application: ywesee GmbH (4B37356EGR)` — GitHub DMG notarization
+- `Apple Distribution: ywesee GmbH (4B37356EGR)` — App Store app signing
+- `3rd Party Mac Developer Application: ywesee GmbH (4B37356EGR)` — App Store app signing (legacy name)
+- `3rd Party Mac Developer Installer: ywesee GmbH (4B37356EGR)` — App Store .pkg signing
+
+### Certificate Setup
+
+The p12 files are created by combining `.cer` files from the Apple Developer Portal with `mac_dist.key` using openssl:
+```bash
+openssl x509 -in mac_app.cer -inform DER -out mac_app.pem
+openssl pkcs12 -export -out mac_app.p12 -inkey mac_dist.key -in mac_app.pem -passout pass:PASSWORD -legacy
+```
+The `-legacy` flag is required for macOS `security import` compatibility.
+
+### App Store Connect API
+
+- Key ID: `7B9HFNP99B`
+- Issuer ID: `69a6de70-0490-47e3-e053-5b8c7c11a4d1`
+- Key file: `AuthKey_7B9HFNP99B.p8` in iCloud `ywesee/p8/`
+
 ## Key Design Decisions
 
 - Common tab holds all shared fields (name, descriptions, keywords, URLs) — store tabs only have store-unique fields to avoid duplicate entry

@@ -40,9 +40,53 @@ cargo build --release
 
 The binary is at `target/release/storetemplate.exe` (Windows) or `target/release/storetemplate` (macOS/Linux).
 
+## Releases
+
+Releases are automated via GitHub Actions. Push a tag to trigger a build:
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+The CI pipeline produces:
+
+- **macOS** — Universal binary (arm64 + x86_64), signed with Developer ID, notarized and stapled DMG, plus App Store .pkg uploaded to App Store Connect
+- **Windows** — Portable ZIP
+- **Linux** — AppImage
+
+### macOS Code Signing & Notarization
+
+The macOS build is signed with `Developer ID Application: ywesee GmbH` and notarized via Apple's notary service. The App Store package is signed with `Apple Distribution` and `3rd Party Mac Developer Installer` certificates and uploaded to App Store Connect via the API.
+
+Required GitHub Secrets:
+
+| Secret | Description |
+|---|---|
+| `APPLE_API_KEY_ID` | App Store Connect API Key ID |
+| `APPLE_API_KEY_P8` | App Store Connect API key (.p8, base64) |
+| `APPLE_API_ISSUER_ID` | App Store Connect Issuer ID |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+| `MACOS_CERTIFICATE` | Mac App Distribution cert (.p12, base64) |
+| `MACOS_CERTIFICATE_PASSWORD` | Password for above |
+| `MACOS_INSTALLER_CERTIFICATE` | Mac Installer Distribution cert (.p12, base64) |
+| `MACOS_INSTALLER_CERTIFICATE_PASSWORD` | Password for above |
+| `MACOS_DEVELOPER_ID_CERTIFICATE` | Developer ID Application cert (.p12, base64) |
+| `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD` | Password for above |
+
+### Setting up a new Mac
+
+Import the signing certificates from iCloud:
+
+```bash
+security import "/Users/zdavatz/Library/Mobile Documents/com~apple~CloudDocs/ywesee/p12/mac_app_distribution.p12" -k ~/Library/Keychains/login.keychain-db -P "PASSWORD"
+security import "/Users/zdavatz/Library/Mobile Documents/com~apple~CloudDocs/ywesee/p12/mac_installer_distribution.p12" -k ~/Library/Keychains/login.keychain-db -P "PASSWORD"
+```
+
+For Developer ID, use Xcode: Settings > Accounts > ywesee GmbH > Manage Certificates.
+
 ## Generated Workflow
 
-When saving, a `.github/workflows/release.yml` is generated alongside the JSON. It includes build jobs for each selected store:
+When saving a template, a `.github/workflows/release.yml` is generated alongside the JSON. It includes build jobs for each selected store:
 
 - **macOS** — `cargo build --release` + DMG creation
 - **iOS** — `xcodebuild` archive + IPA export
