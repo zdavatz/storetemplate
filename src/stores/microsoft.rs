@@ -22,7 +22,13 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
     ui.label("Name, descriptions and keywords are taken from the Common tab.");
     ui.add_space(4.0);
 
-    widgets::text_field(ui, "MS Store App ID", &mut state.msstore_app_id, None, false);
+    ui.horizontal(|ui| {
+        ui.label("MS Store App ID");
+        ui.text_edit_singleline(&mut state.msstore_app_id);
+        if ui.link("Open Partner Center").clicked() {
+            let _ = open::that("https://partner.microsoft.com/dashboard/apps-and-games/overview");
+        }
+    });
     widgets::choice_field(ui, "Category", &mut state.category, CATEGORIES);
     widgets::text_field(ui, "Subcategory", &mut state.subcategory, None, false);
 

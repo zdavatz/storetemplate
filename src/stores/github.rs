@@ -18,6 +18,7 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut GithubState) {
     widgets::bool_field(ui, "Create as draft", &mut state.draft);
     widgets::bool_field(ui, "Mark as pre-release", &mut state.prerelease);
     widgets::bool_field(ui, "Auto-generate release notes from PRs", &mut state.generate_release_notes);
+    widgets::bool_field(ui, "Build AppImage (Linux)", &mut state.build_appimage);
 
     ui.add_space(8.0);
     widgets::list_field(ui, "Asset file patterns (e.g. *.dmg, *.zip)", &mut state.asset_patterns, None);

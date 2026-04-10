@@ -20,13 +20,14 @@ cargo run            # build and launch GUI
 - `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`
 - `src/widgets.rs` — reusable form widget helpers: `text_field`, `multiline_field`, `choice_field`, `bool_field`, `list_field`, `path_field`, `url_field`, `email_field`, `per_language_text`, `per_language_multiline`, `per_language_list`
 - `src/languages.rs` — `LANGUAGES` constant (20 ISO codes with display names)
-- `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog
+- `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog and also generates `.github/workflows/release.yml`
+- `src/workflow.rs` — `build_workflow()` generates GitHub Actions release workflow YAML based on selected stores (build jobs for macOS/iOS/Windows/Android/AppImage + create-release job)
 - `src/stores/mod.rs` — module registry
 - `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating)
-- `src/stores/apple.rs` — Apple-specific UI (SKU, subtitle, categories, screenshots per device type for macOS/iOS)
-- `src/stores/google_play.rs` — Android-specific UI (package name, category, IARC content rating, assets)
-- `src/stores/microsoft.rs` — Windows Store UI (category, "what's new", product features, search terms, logos, installer config)
-- `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, asset patterns)
+- `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS)
+- `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
+- `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
+- `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, build AppImage option, asset patterns)
 
 ## Key Design Decisions
 
@@ -34,6 +35,11 @@ cargo run            # build and launch GUI
 - Per-language fields render side-by-side language groups using `HashMap<String, String>` keyed by ISO code
 - egui immediate mode: conditional rendering based on which stores are checked — no dynamic widget tree needed
 - Validation runs on save, not per-keystroke; character counts shown inline with red/gray coloring
+- Light theme (egui::Visuals::light()) with white tab bar background
+- Store-specific fields include direct links to open the relevant store console in the browser (App Store Connect, Google Play Console, Partner Center)
+- SKU auto-suggested from app name (lowercase, special chars replaced with underscores)
+- Save generates both JSON template and `.github/workflows/release.yml` with build jobs matching selected stores
+- Widget ID clashes resolved via `ui.push_id()` for macOS/iOS sections and `from_id_salt(label)` for ComboBoxes
 
 ## License
 

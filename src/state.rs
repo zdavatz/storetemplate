@@ -210,6 +210,7 @@ pub struct GithubState {
     pub draft: bool,
     pub prerelease: bool,
     pub generate_release_notes: bool,
+    pub build_appimage: bool,
     pub asset_patterns: String,
 }
 
@@ -223,6 +224,7 @@ impl Default for GithubState {
             draft: false,
             prerelease: false,
             generate_release_notes: true,
+            build_appimage: false,
             asset_patterns: String::new(),
         }
     }

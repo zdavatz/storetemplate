@@ -53,7 +53,7 @@ pub fn choice_field(ui: &mut egui::Ui, label: &str, selected: &mut usize, choice
     ui.horizontal(|ui| {
         ui.label(label);
         let current = choices.get(*selected).unwrap_or(&"");
-        egui::ComboBox::from_label("")
+        egui::ComboBox::from_id_salt(label)
             .selected_text(*current)
             .width(300.0)
             .show_ui(ui, |ui| {

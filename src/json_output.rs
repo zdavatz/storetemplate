@@ -165,6 +165,7 @@ pub fn build_json(state: &AppState) -> Value {
             "draft": gh.draft,
             "prerelease": gh.prerelease,
             "generate_release_notes": gh.generate_release_notes,
+            "build_appimage": gh.build_appimage,
             "asset_patterns": split_list(&gh.asset_patterns),
         }));
     }
@@ -220,6 +221,15 @@ pub fn save_to_file(state: &AppState) -> Result<PathBuf, String> {
     let json = build_json(state);
     let content = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
+
+    // Also save GitHub Actions workflow YAML next to the JSON
+    let workflow_content = crate::workflow::build_workflow(state);
+    let parent = path.parent().ok_or("Cannot determine parent directory")?;
+    let workflow_dir = parent.join(".github").join("workflows");
+    std::fs::create_dir_all(&workflow_dir).map_err(|e| format!("Failed to create .github/workflows: {}", e))?;
+    let workflow_path = workflow_dir.join("release.yml");
+    std::fs::write(&workflow_path, workflow_content)
+        .map_err(|e| format!("Failed to write workflow: {}", e))?;
 
     Ok(path)
 }

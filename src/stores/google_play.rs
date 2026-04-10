@@ -22,7 +22,13 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut GooglePlayState, _languages: &[
     ui.label("Name, descriptions and keywords are taken from the Common tab.");
     ui.add_space(4.0);
 
-    widgets::text_field(ui, "Package name", &mut state.package_name, None, true);
+    ui.horizontal(|ui| {
+        ui.label("Package name*");
+        ui.text_edit_singleline(&mut state.package_name);
+        if ui.link("Open Google Play Console").clicked() {
+            let _ = open::that("https://play.google.com/console/developers");
+        }
+    });
     widgets::choice_field(ui, "Category", &mut state.category, CATEGORIES);
     widgets::choice_field(ui, "Release track", &mut state.release_track, RELEASE_TRACKS);
 

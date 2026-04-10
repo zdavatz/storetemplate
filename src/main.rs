@@ -3,6 +3,7 @@ mod state;
 mod widgets;
 mod stores;
 mod json_output;
+mod workflow;
 
 use eframe::egui;
 
@@ -55,22 +56,27 @@ impl eframe::App for StoreTemplateApp {
 
             ui.add_space(4.0);
 
-            // Tab bar
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.state.active_tab, Tab::Common, "Common");
-                if self.state.has_apple() {
-                    ui.selectable_value(&mut self.state.active_tab, Tab::Apple, "Apple");
-                }
-                if self.state.store_android {
-                    ui.selectable_value(&mut self.state.active_tab, Tab::Android, "Android");
-                }
-                if self.state.store_windows {
-                    ui.selectable_value(&mut self.state.active_tab, Tab::Windows, "Windows");
-                }
-                if self.state.store_github {
-                    ui.selectable_value(&mut self.state.active_tab, Tab::GitHub, "GitHub");
-                }
-            });
+            // Tab bar with white background
+            egui::Frame::new()
+                .fill(egui::Color32::WHITE)
+                .inner_margin(egui::Margin::symmetric(6, 4))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.selectable_value(&mut self.state.active_tab, Tab::Common, "Common");
+                        if self.state.has_apple() {
+                            ui.selectable_value(&mut self.state.active_tab, Tab::Apple, "Apple");
+                        }
+                        if self.state.store_android {
+                            ui.selectable_value(&mut self.state.active_tab, Tab::Android, "Android");
+                        }
+                        if self.state.store_windows {
+                            ui.selectable_value(&mut self.state.active_tab, Tab::Windows, "Windows");
+                        }
+                        if self.state.store_github {
+                            ui.selectable_value(&mut self.state.active_tab, Tab::GitHub, "GitHub");
+                        }
+                    });
+                });
             ui.add_space(2.0);
         });
 
@@ -130,7 +136,8 @@ impl eframe::App for StoreTemplateApp {
                     Tab::Apple => {
                         let has_macos = self.state.store_macos;
                         let has_ios = self.state.store_ios;
-                        stores::apple::ui_section(ui, &mut self.state.apple, &langs, has_macos, has_ios);
+                        let app_name = self.state.common.app_name.clone();
+                        stores::apple::ui_section(ui, &mut self.state.apple, &langs, has_macos, has_ios, &app_name);
                     }
                     Tab::Android => {
                         stores::google_play::ui_section(ui, &mut self.state.google_play, &langs);
@@ -160,6 +167,11 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "storetemplate",
         options,
-        Box::new(|_cc| Ok(Box::new(StoreTemplateApp::new()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(egui::Visuals::light());
+
+
+            Ok(Box::new(StoreTemplateApp::new()))
+        }),
     )
 }
