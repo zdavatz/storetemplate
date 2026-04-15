@@ -205,7 +205,7 @@ pub fn deploy_apple(state: &AppState) -> DeployReceiver {
         let _ = tx.send(DeployMsg::Log("JWT token generated.".into()));
 
         let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(120))
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
@@ -614,7 +614,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
         }
 
         let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(120))
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
@@ -696,16 +696,45 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             }));
         }
 
-        // Delete any pending submission first, then create new one
-        let sub_resp = client.post(format!("{}/submissions", pc_base))
+        // Wait for delete to propagate
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Create new submission with listings included
+        let sub_url = format!("{}/submissions", pc_base);
+        let _ = tx.send(DeployMsg::Log(format!("POST {}", sub_url)));
+        let sub_resp = client.post(&sub_url)
             .header("Authorization", &auth)
-            .header("Content-Length", "0")
+            .json(&json!({
+                "listings": initial_listings,
+                "pricing": {
+                    "trialPeriod": "NoFreeTrial",
+                    "marketSpecificPricings": {},
+                    "sales": [],
+                    "priceId": "Free"
+                },
+                "applicationCategory": "BooksAndReference_EReader",
+                "allowTargetFutureDeviceFamilies": {
+                    "Desktop": true,
+                    "Mobile": false,
+                    "Xbox": false,
+                    "Holographic": false
+                },
+                "allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies": true,
+                "hardwarePreferences": ["Keyboard", "Mouse"],
+                "hasExternalInAppProducts": false,
+                "meetAccessibilityGuidelines": true,
+                "canInstallOnRemovableMedia": true,
+                "automaticBackupEnabled": true,
+                "applicationPackages": []
+            }))
             .send();
 
         let (submission_id, mut submission_body) = match sub_resp {
             Ok(r) => {
                 let status = r.status();
-                let body: serde_json::Value = r.json().unwrap_or_default();
+                let text = r.text().unwrap_or_default();
+                let _ = tx.send(DeployMsg::Log(format!("Response: {} ({})", status, text.len())));
+                let body: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
                 if !status.is_success() {
                     let _ = tx.send(DeployMsg::Error(format!("Create submission failed ({}): {}", status, body)));
                     return;
@@ -714,7 +743,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                 let _ = tx.send(DeployMsg::Log(format!("Submission created: {}", id)));
                 (id, body)
             }
-            Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Create submission failed: {}", e))); return; }
+            Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Create submission failed: {:?}", e))); return; }
         };
 
         if submission_id.is_empty() {
@@ -729,7 +758,13 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             let _ = tx.send(DeployMsg::Log(format!("  Set listing for {}", microsoft_locale(lang))));
         }
 
-        // 4. PUT the updated submission
+        // 4. Fix required fields before PUT
+        submission_body["targetPublishMode"] = json!("Immediate");
+        submission_body["targetPublishDate"] = json!("");
+        submission_body["visibility"] = json!("Public");
+        submission_body["notesForCertification"] = json!(format!("Desktop utility for exporting data from swissdamed.ch. Requires internet access. No login required. Contact: {}", support_url));
+
+        // PUT the updated submission
         let _ = tx.send(DeployMsg::Log("Submitting updated metadata...".into()));
         let put_resp = client.put(format!("{}/submissions/{}", pc_base, submission_id))
             .header("Authorization", &auth)
@@ -755,6 +790,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
         let _ = tx.send(DeployMsg::Log("Committing submission...".into()));
         let commit_resp = client.post(format!("{}/submissions/{}/commit", pc_base, submission_id))
             .header("Authorization", &auth)
+            .body(Vec::<u8>::new())
             .send();
 
         match commit_resp {
