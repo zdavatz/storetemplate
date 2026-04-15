@@ -6,7 +6,7 @@
   "store_github": false,
   "lang_selected": [
     true,
-    false,
+    true,
     false,
     false,
     false,
@@ -36,11 +36,11 @@
       "en": "Export Data from Swissdamed to SQlite or CSV"
     },
     "full_description": {
-      "de": "",
+      "de": "Swissdamed Daten Export nach SQlite und CSV.",
       "en": "Export Data from Swissdamed to SQlite or CSV with ease."
     },
     "keywords": {
-      "de": "",
+      "de": "Swissdamed, SQlite",
       "en": "Swissdamed, SQlite"
     },
     "privacy_policy_url": "https://ywesee.com/Swissdamed2Sqlite/Pivacy",
@@ -56,10 +56,12 @@
   "apple": {
     "sku": "swissdamed2sqlite",
     "subtitle": {
-      "en": "Swissdamed2Sqlite"
+      "en": "Swissdamed2Sqlite",
+      "de": "Swissdamed2Sqlite SwissMedTech"
     },
     "promotional_text": {
-      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market."
+      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market.",
+      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen."
     },
     "marketing_url": "https://ywesee.com/Swissdamed2Sqlite/Swissdamed2Sqlite",
     "macos_primary_category": 1,
@@ -94,12 +96,15 @@
     "category": 2,
     "subcategory": "",
     "whats_new": {
-      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market."
+      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market.",
+      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen."
     },
     "product_features": {
-      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market."
+      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market.",
+      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen."
     },
     "search_terms": {
+      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen.",
       "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market."
     },
     "certification_notes": "",
@@ -126,11 +131,11 @@
     "asset_patterns": ""
   },
   "deploy": {
-    "apple_api_key_path": "",
-    "apple_api_key_id": "",
-    "apple_api_issuer_id": "",
-    "azure_tenant_id": "",
-    "azure_client_id": "",
+    "apple_api_key_path": "/home/zeno/.apple/AuthKey_7B9HFNP99B.p8",
+    "apple_api_key_id": "7B9HFNP99B",
+    "apple_api_issuer_id": "69a6de70-0490-47e3-e053-5b8c7c11a4d1",
+    "azure_tenant_id": "ec395ff9-5d29-4d79-bef8-c48fe62324a4",
+    "azure_client_id": "0e675d33-6b6a-4c9f-a354-492fdc5fa608",
     "azure_client_secret": "",
     "github_pat": "",
     "github_repo": ""

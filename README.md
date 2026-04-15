@@ -97,6 +97,55 @@ When saving a template, a `.github/workflows/release.yml` is generated alongside
 - **AppImage** (optional) — `cargo build --release` + `appimagetool` packaging
 - **GitHub Release** — `softprops/action-gh-release`, collects all build artifacts
 
+## Deploy (API Integration)
+
+The **Deploy** tab lets you push metadata directly to store APIs — no manual form-filling in App Store Connect or Partner Center needed.
+
+### Auto-fill Credentials
+
+Click **"Auto-fill Credentials"** to load credentials from:
+- `~/.apple/credentials.json` — Apple API Key ID, Issuer ID, .p8 key path, Azure AD Tenant/Client/Secret
+- `~/.config/gh/hosts.yml` — GitHub PAT (from `gh` CLI)
+
+### Apple App Store Connect
+
+Reads from Common + Apple tabs and via the App Store Connect API:
+- Registers Bundle ID (or finds existing)
+- Creates/updates app info localizations per language (name, subtitle, privacy policy URL)
+- Creates/updates version localizations per language (description, keywords, support URL, marketing URL)
+- Sets copyright and primary locale
+- Creates Mac App Store provisioning profile
+
+### Microsoft Partner Center
+
+Reads from Common + Windows tabs and via the Partner Center API:
+- Authenticates via Azure AD OAuth2
+- Creates/updates submission with per-language listings (title, description, keywords, features, search terms, release notes, URLs)
+- Commits submission for review
+
+### GitHub Secrets & Workflow
+
+Uses `gh` CLI to:
+- Set all Apple and Azure secrets in the target repository
+- Generate and push `release.yml` workflow
+
+### Credentials File (`~/.apple/credentials.json`)
+
+```json
+{
+  "apple": {
+    "api_key_id": "YOUR_KEY_ID",
+    "api_key_path": "~/.apple/AuthKey_XXXX.p8",
+    "api_issuer_id": "YOUR_ISSUER_UUID"
+  },
+  "azure": {
+    "tenant_id": "YOUR_TENANT_UUID",
+    "client_id": "YOUR_CLIENT_UUID",
+    "client_secret": "YOUR_SECRET"
+  }
+}
+```
+
 ## AI Icon Generation
 
 Generate app icons directly from a text description using the xAI Grok API. Set your API key:
@@ -122,6 +171,7 @@ Features:
 - `reqwest` — HTTP client for Grok API
 - `image` — image processing and background removal
 - `base64` — base64 encoding/decoding
+- `jsonwebtoken` — ES256 JWT signing for Apple App Store Connect API
 
 ## License
 

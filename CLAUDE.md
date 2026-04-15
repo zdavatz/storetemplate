@@ -29,6 +29,13 @@ cargo run            # build and launch GUI
 - `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
 - `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
 - `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, build AppImage option, asset patterns)
+- `src/deploy.rs` — Store API integration for one-click deployment:
+  - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
+  - `deploy_apple()` — App Store Connect API: JWT auth (ES256), bundle ID registration, app info/version localizations (per-language), provisioning profile creation
+  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create/update, per-language listings (title, description, keywords, URLs), commit
+  - `deploy_github()` — sets secrets via `gh` CLI, generates and pushes release.yml workflow
+  - All deploy functions run in background threads with `mpsc` channel (same pattern as `icon_gen.rs`)
+  - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo), persisted with auto-save
 
 ## macOS Build & Release Infrastructure
 
@@ -72,6 +79,8 @@ The `-legacy` flag is required for macOS `security import` compatibility.
 - AI icon generation via xAI Grok API with background transparency post-processing; icons saved to `png/` with timestamps
 - Iterate on existing icon by sending current image to the Grok edit endpoint
 - App icon loaded from `png/Storetemplate_icon_1775851683.png` for taskbar/dock display
+- Deploy tab reads all metadata from existing form state (Common + store tabs), so user fills form once and deploys to all stores
+- Credentials auto-filled from `~/.apple/credentials.json` (Apple + Azure) and `~/.config/gh/hosts.yml` (GitHub PAT)
 - Widget ID clashes resolved via `ui.push_id()` for macOS/iOS sections and `from_id_salt(label)` for ComboBoxes
 
 ## License
