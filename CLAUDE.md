@@ -32,7 +32,7 @@ cargo run            # build and launch GUI
 - `src/deploy.rs` — Store API integration for one-click deployment:
   - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
   - `deploy_apple()` — App Store Connect API: JWT auth (ES256), bundle ID registration, app info/version localizations (per-language), provisioning profile creation
-  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create/update, per-language listings (title, description, keywords, URLs), commit
+  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate)
   - `deploy_github()` — sets secrets via `gh` CLI, generates and pushes release.yml workflow
   - All deploy functions run in background threads with `mpsc` channel (same pattern as `icon_gen.rs`)
   - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo), persisted with auto-save

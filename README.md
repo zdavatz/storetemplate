@@ -120,8 +120,10 @@ Reads from Common + Apple tabs and via the App Store Connect API:
 
 Reads from Common + Windows tabs and via the Partner Center API:
 - Authenticates via Azure AD OAuth2
-- Creates/updates submission with per-language listings (title, description, keywords, features, search terms, release notes, URLs)
-- Commits submission for review
+- Deletes pending submission if exists, creates new submission with listings
+- Sets pricing (Free), visibility (Public), publish mode (Immediate)
+- Updates per-language listings (title, description, keywords, features, search terms, release notes, URLs)
+- Commits submission for Microsoft review
 
 ### GitHub Secrets & Workflow
 
