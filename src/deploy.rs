@@ -696,37 +696,11 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             }));
         }
 
-        // First try: POST with empty body (clones last published submission)
-        // If that fails (no previous submission), retry with listings included
-        let sub_resp_result = client.post(format!("{}/submissions", pc_base))
+        // Delete any pending submission first, then create new one
+        let sub_resp = client.post(format!("{}/submissions", pc_base))
             .header("Authorization", &auth)
             .header("Content-Length", "0")
             .send();
-
-        let sub_resp = match sub_resp_result {
-            Ok(r) if r.status().is_success() => Ok(r),
-            _ => {
-                let _ = tx.send(DeployMsg::Log("First submission — including listings in request...".into()));
-                client.post(format!("{}/submissions", pc_base))
-                    .header("Authorization", &auth)
-                    .json(&json!({
-                        "listings": initial_listings,
-                        "applicationCategory": "BooksAndReference_EReader",
-                        "allowTargetFutureDeviceFamilies": {
-                            "Desktop": true,
-                            "Mobile": false,
-                            "Xbox": false,
-                            "Holographic": false
-                        },
-                        "hardwarePreferences": ["Keyboard", "Mouse"],
-                        "hasExternalInAppProducts": false,
-                        "meetAccessibilityGuidelines": true,
-                        "canInstallOnRemovableMedia": true,
-                        "automaticBackupEnabled": true
-                    }))
-                    .send()
-            }
-        };
 
         let (submission_id, mut submission_body) = match sub_resp {
             Ok(r) => {
@@ -748,40 +722,11 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             return;
         }
 
-        // 3. Update listings per language
+        // 3. Update listings per language (using initial_listings built above)
         let _ = tx.send(DeployMsg::Log("Updating listings...".into()));
-        let listings = submission_body["listings"].as_object_mut();
-
-        if let Some(listings_map) = listings {
-            for lang in &languages {
-                let locale = microsoft_locale(lang);
-                let desc = full_desc.get(lang).cloned().unwrap_or_default();
-                let short = short_desc.get(lang).cloned().unwrap_or_default();
-                let kw_str = keywords.get(lang).cloned().unwrap_or_default();
-                let kw_list: Vec<String> = kw_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                let wn = whats_new.get(lang).cloned().unwrap_or_default();
-                let feat_str = product_features.get(lang).cloned().unwrap_or_default();
-                let feat_list: Vec<String> = feat_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                let st_str = search_terms.get(lang).cloned().unwrap_or_default();
-                let st_list: Vec<String> = st_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-
-                let listing = json!({
-                    "baseListing": {
-                        "title": app_name,
-                        "description": desc,
-                        "shortDescription": short,
-                        "releaseNotes": wn,
-                        "keywords": kw_list,
-                        "features": feat_list,
-                        "searchTerms": st_list,
-                        "supportContact": support_url,
-                        "privacyPolicy": privacy_url
-                    }
-                });
-
-                listings_map.insert(locale.to_string(), listing);
-                let _ = tx.send(DeployMsg::Log(format!("  Updated listing for {}", locale)));
-            }
+        submission_body["listings"] = serde_json::Value::Object(initial_listings);
+        for lang in &languages {
+            let _ = tx.send(DeployMsg::Log(format!("  Set listing for {}", microsoft_locale(lang))));
         }
 
         // 4. PUT the updated submission
