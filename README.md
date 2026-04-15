@@ -26,7 +26,7 @@ Form state is auto-saved to the `json/` directory and restored on next launch.
 
 Each template includes the maximum metadata supported by each store's API:
 
-- **Common** (filled once, shared by all stores): app name, descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
+- **Common** (filled once, shared by all stores): app name, bundle/package ID (auto-suggested), descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
 - **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type
 - **Google Play**: package name (with link to Google Play Console), category, feature graphic, IARC content rating, release track
 - **Microsoft Store**: App ID (with link to Partner Center), "What's new", product features, search terms, store logos, installer config, system requirements

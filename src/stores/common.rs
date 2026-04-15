@@ -20,6 +20,18 @@ pub fn ui_section(
 
     widgets::text_field(ui, "App name", &mut state.app_name, None, true);
     widgets::text_field(ui, "Display name", &mut state.display_name, None, true);
+
+    // Auto-suggest bundle ID from app name
+    if state.bundle_id.is_empty() && !state.app_name.is_empty() {
+        let sanitized: String = state.app_name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '.' })
+            .collect::<String>()
+            .replace("..", ".");
+        let sanitized = sanitized.trim_matches('.').to_string();
+        state.bundle_id = format!("com.example.{}", sanitized);
+    }
     widgets::text_field(ui, "Bundle/Package ID", &mut state.bundle_id, None, true);
     widgets::text_field(ui, "Version", &mut state.version, None, true);
 

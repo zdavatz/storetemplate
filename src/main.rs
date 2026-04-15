@@ -155,9 +155,15 @@ impl eframe::App for StoreTemplateApp {
         egui::TopBottomPanel::bottom("footer").show(ctx, |ui| {
             ui.add_space(4.0);
 
-            // Status / errors
+            // Status / errors (auto-clear after 3 seconds)
+            if let Some(ref t) = self.state.save_status_time {
+                if t.elapsed().as_secs() >= 3 {
+                    self.state.save_status = None;
+                    self.state.save_status_time = None;
+                }
+            }
             if let Some(ref status) = self.state.save_status {
-                ui.colored_label(egui::Color32::GREEN, status);
+                ui.colored_label(egui::Color32::DARK_GREEN, status);
             }
             if !self.state.validation_errors.is_empty() {
                 for err in &self.state.validation_errors {
@@ -172,6 +178,11 @@ impl eframe::App for StoreTemplateApp {
                         match json_output::save_to_file(&self.state) {
                             Ok(path) => {
                                 self.state.save_status = Some(format!("Saved to: {}", path.display()));
+                                self.state.save_status_time = Some(std::time::Instant::now());
+                            }
+                            Err(e) if e == "Save cancelled." => {
+                                // User cancelled the file dialog — not an error
+                                self.state.save_status = None;
                             }
                             Err(e) => {
                                 self.state.save_status = Some(format!("Error: {}", e));

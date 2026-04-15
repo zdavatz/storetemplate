@@ -30,6 +30,7 @@ pub struct AppState {
     // UI state
     pub active_tab: Tab,
     pub save_status: Option<String>,
+    pub save_status_time: Option<std::time::Instant>,
     pub validation_errors: Vec<String>,
 
     // Icon generation
@@ -57,6 +58,7 @@ impl Default for AppState {
             github: GithubState::default(),
             active_tab: Tab::default(),
             save_status: None,
+            save_status_time: None,
             validation_errors: Vec::new(),
             icon_gen_receiver: None,
             icon_gen_status: None,

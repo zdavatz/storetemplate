@@ -24,7 +24,7 @@ cargo run            # build and launch GUI
 - `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog and also generates `.github/workflows/release.yml`
 - `src/workflow.rs` — `build_workflow()` generates GitHub Actions release workflow YAML based on selected stores (build jobs for macOS/iOS/Windows/Android/AppImage + create-release job)
 - `src/stores/mod.rs` — module registry
-- `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating, icon description field, generate/iterate icon buttons, icon preview)
+- `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating, icon description field, generate/iterate icon buttons, icon preview). Bundle/Package ID auto-suggested from app name as `com.example.appname`
 - `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS)
 - `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
 - `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
@@ -64,6 +64,8 @@ The `-legacy` flag is required for macOS `security import` compatibility.
 - Light theme (egui::Visuals::light()) with white tab bar background
 - Store-specific fields include direct links to open the relevant store console in the browser (App Store Connect, Google Play Console, Partner Center)
 - SKU auto-suggested from app name (lowercase, special chars replaced with underscores)
+- Bundle/Package ID auto-suggested as `com.example.<app_name>` — user replaces `com.example` with their domain
+- Save status shows "Saved to: ..." for 3 seconds then auto-clears; cancelled save dialog shows nothing
 - Save generates both JSON template and `.github/workflows/release.yml` with build jobs matching selected stores
 - Auto-save to `json/<app_name>.json` every ~2 seconds and on exit; auto-loads most recent on startup
 - Load button opens file picker for `json/` directory to restore any saved state
