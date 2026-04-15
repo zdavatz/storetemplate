@@ -27,12 +27,12 @@ cargo run            # build and launch GUI
 - `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating, icon description field, generate/iterate icon buttons, icon preview). Bundle/Package ID auto-suggested from app name as `com.example.appname`
 - `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS)
 - `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
-- `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, "what's new", product features, search terms, logos, installer config)
+- `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, support info/phone/address for Properties page, "what's new", product features, search terms, logos, installer config)
 - `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, build AppImage option, asset patterns)
 - `src/deploy.rs` — Store API integration for one-click deployment:
   - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
   - `deploy_apple()` — App Store Connect API: JWT auth (ES256), bundle ID registration, app info/version localizations (per-language), provisioning profile creation
-  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate)
+  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), dynamic applicationCategory from state, contactInfo (phone/address/email for Properties page), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate)
   - `deploy_github()` — sets secrets via `gh` CLI, generates and pushes release.yml workflow
   - All deploy functions run in background threads with `mpsc` channel (same pattern as `icon_gen.rs`)
   - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo), persisted with auto-save

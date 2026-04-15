@@ -45,6 +45,26 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
 
     ui.add_space(12.0);
     ui.separator();
+    ui.heading("Support Info (Properties)");
+    ui.add_space(4.0);
+
+    ui.label("These fields appear on the Properties page in Partner Center.");
+    ui.add_space(4.0);
+    widgets::text_field(ui, "Phone number", &mut state.contact_phone, None, false);
+    widgets::text_field(ui, "Address line 1", &mut state.support_address1, None, false);
+    widgets::text_field(ui, "Address line 2", &mut state.support_address2, None, false);
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            widgets::text_field(ui, "ZIP / Postal code", &mut state.support_zip, None, false);
+        });
+        ui.vertical(|ui| {
+            widgets::text_field(ui, "City", &mut state.support_city, None, false);
+        });
+    });
+    widgets::text_field(ui, "Country / Region", &mut state.support_country, None, false);
+
+    ui.add_space(12.0);
+    ui.separator();
     ui.heading("Review & Legal");
     ui.add_space(4.0);
 

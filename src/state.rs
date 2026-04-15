@@ -235,6 +235,13 @@ pub struct MicrosoftState {
     pub min_os: String,
     pub min_ram: usize,
     pub min_disk: String,
+    // Support info (Properties page)
+    pub contact_phone: String,
+    pub support_address1: String,
+    pub support_address2: String,
+    pub support_zip: String,
+    pub support_city: String,
+    pub support_country: String,
 }
 
 impl Default for MicrosoftState {
@@ -257,6 +264,12 @@ impl Default for MicrosoftState {
             min_os: "Windows 10".to_string(),
             min_ram: 3, // 2GB
             min_disk: String::new(),
+            contact_phone: String::new(),
+            support_address1: String::new(),
+            support_address2: String::new(),
+            support_zip: String::new(),
+            support_city: String::new(),
+            support_country: String::new(),
         }
     }
 }

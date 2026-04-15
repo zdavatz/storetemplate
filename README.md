@@ -29,7 +29,7 @@ Each template includes the maximum metadata supported by each store's API:
 - **Common** (filled once, shared by all stores): app name, bundle/package ID (auto-suggested), descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
 - **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type
 - **Google Play**: package name (with link to Google Play Console), category, feature graphic, IARC content rating, release track
-- **Microsoft Store**: App ID (with link to Partner Center), "What's new", product features, search terms, store logos, installer config, system requirements
+- **Microsoft Store**: App ID (with link to Partner Center), support info (phone, address for Properties page), "What's new", product features, search terms, store logos, installer config, system requirements
 - **GitHub**: tag pattern, release notes template, draft/prerelease flags, build AppImage option, asset patterns
 
 ## Building
@@ -121,7 +121,9 @@ Reads from Common + Apple tabs and via the App Store Connect API:
 Reads from Common + Windows tabs and via the Partner Center API:
 - Authenticates via Azure AD OAuth2
 - Deletes pending submission if exists, creates new submission with listings
+- Sets applicationCategory dynamically from Windows tab category + subcategory
 - Sets pricing (Free), visibility (Public), publish mode (Immediate)
+- Sends contactInfo (support email, phone, website, privacy URL, company address) for the Properties page
 - Updates per-language listings (title, description, keywords, features, search terms, release notes, URLs)
 - Commits submission for Microsoft review
 

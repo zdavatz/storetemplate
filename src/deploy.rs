@@ -671,10 +671,21 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let display_name = state.common.display_name.clone();
     let copyright = state.common.copyright.clone();
     let website_url = state.common.website_url.clone();
+    let contact_email = state.common.contact_email.clone();
     let whats_new = state.microsoft.whats_new.clone();
     let product_features = state.microsoft.product_features.clone();
     let search_terms = state.microsoft.search_terms.clone();
     let languages = state.active_languages.clone();
+    // Category
+    let category_idx = state.microsoft.category;
+    let subcategory = state.microsoft.subcategory.clone();
+    // Support info (Properties page)
+    let contact_phone = state.microsoft.contact_phone.clone();
+    let support_address1 = state.microsoft.support_address1.clone();
+    let support_address2 = state.microsoft.support_address2.clone();
+    let support_zip = state.microsoft.support_zip.clone();
+    let support_city = state.microsoft.support_city.clone();
+    let support_country = state.microsoft.support_country.clone();
 
     thread::spawn(move || {
         let _ = tx.send(DeployMsg::Log("Starting Microsoft Store deploy...".into()));
@@ -754,6 +765,12 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             let st_str = search_terms.get(lang).cloned().unwrap_or_default();
             let st_list: Vec<String> = st_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
 
+            let support_contact_val = if !contact_email.is_empty() {
+                contact_email.clone()
+            } else {
+                support_url.clone()
+            };
+
             initial_listings.insert(locale.to_string(), json!({
                 "baseListing": {
                     "title": app_name,
@@ -764,7 +781,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                     "features": feat_list,
                     "searchTerms": st_list,
                     "copyrightAndTrademarkInfo": format!("Copyright 2026 {}", copyright),
-                    "supportContact": support_url,
+                    "supportContact": support_contact_val,
                     "privacyPolicy": privacy_url,
                     "websiteUrl": website_url
                 }
@@ -773,6 +790,20 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
 
         // Wait for delete to propagate
         std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // Build applicationCategory from state
+        let categories = crate::stores::microsoft::CATEGORIES;
+        let cat_name = if category_idx < categories.len() {
+            categories[category_idx]
+        } else {
+            "UtilitiesAndTools"
+        };
+        let app_category = if subcategory.is_empty() {
+            cat_name.to_string()
+        } else {
+            format!("{}_{}", cat_name, subcategory)
+        };
+        let _ = tx.send(DeployMsg::Log(format!("Category: {}", app_category)));
 
         // Create new submission with listings included
         let sub_url = format!("{}/submissions", pc_base);
@@ -787,7 +818,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                     "sales": [],
                     "priceId": "Free"
                 },
-                "applicationCategory": "BooksAndReference_EReader",
+                "applicationCategory": app_category,
                 "allowTargetFutureDeviceFamilies": {
                     "Desktop": true,
                     "Mobile": false,
@@ -800,7 +831,19 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                 "meetAccessibilityGuidelines": true,
                 "canInstallOnRemovableMedia": true,
                 "automaticBackupEnabled": true,
-                "applicationPackages": []
+                "applicationPackages": [],
+                "contactInfo": {
+                    "supportEmail": contact_email,
+                    "supportUrl": support_url,
+                    "supportPhone": contact_phone,
+                    "websiteUrl": website_url,
+                    "privacyPolicyUrl": privacy_url,
+                    "companyAddress1": support_address1,
+                    "companyAddress2": support_address2,
+                    "companyPostalCode": support_zip,
+                    "companyCity": support_city,
+                    "companyCountry": support_country
+                }
             }))
             .send();
 
