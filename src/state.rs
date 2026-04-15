@@ -318,6 +318,8 @@ pub struct DeployState {
     // GitHub
     pub github_pat: String,
     pub github_repo: String,
+    // Package source directory (for binary upload)
+    pub source_dir: String,
 }
 
 impl Default for DeployState {
@@ -331,6 +333,7 @@ impl Default for DeployState {
             azure_client_secret: String::new(),
             github_pat: String::new(),
             github_repo: String::new(),
+            source_dir: String::new(),
         }
     }
 }

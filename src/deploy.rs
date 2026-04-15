@@ -656,6 +656,138 @@ fn microsoft_locale(lang: &str) -> &'static str {
     }
 }
 
+/// Resolve binary path from source directory.
+fn resolve_binary_from_source_dir(source_dir: &str) -> Option<std::path::PathBuf> {
+    let source = std::path::Path::new(source_dir);
+    let cargo_toml = source.join("Cargo.toml");
+    let content = std::fs::read_to_string(&cargo_toml).ok()?;
+    let name = crate::stores::microsoft::extract_cargo_name(&content)?;
+
+    // Try .exe first (Windows cross-compile), then plain binary
+    let exe_path = source.join("target").join("release").join(format!("{}.exe", name));
+    if exe_path.exists() {
+        return Some(exe_path);
+    }
+    let bin_path = source.join("target").join("release").join(&name);
+    if bin_path.exists() {
+        return Some(bin_path);
+    }
+    None
+}
+
+/// Build applicationPackages array for the submission.
+fn build_application_packages(source_dir: &str, _installer_type_idx: usize) -> serde_json::Value {
+    if source_dir.is_empty() {
+        return json!([]);
+    }
+    match resolve_binary_from_source_dir(source_dir) {
+        Some(path) => {
+            let file_name = path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "package.exe".to_string());
+            json!([{
+                "fileName": file_name,
+                "fileStatus": "PendingUpload",
+                "minimumDirectXVersion": "None",
+                "minimumSystemRam": "None"
+            }])
+        }
+        None => json!([])
+    }
+}
+
+/// Create a ZIP file in memory containing the package file.
+fn create_package_zip(pkg_path: &std::path::Path) -> Result<Vec<u8>, String> {
+    use std::io::{Write, Read};
+
+    let file_name = pkg_path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .ok_or("Cannot determine filename")?;
+
+    let mut file_data = Vec::new();
+    std::fs::File::open(pkg_path)
+        .map_err(|e| format!("Cannot open {}: {}", pkg_path.display(), e))?
+        .read_to_end(&mut file_data)
+        .map_err(|e| format!("Cannot read {}: {}", pkg_path.display(), e))?;
+
+    // Build a ZIP archive in memory using a minimal ZIP implementation
+    let mut buf = Vec::new();
+
+    // Local file header
+    let crc = crc32_hash(&file_data);
+    let compressed_size = file_data.len() as u32;
+    let uncompressed_size = file_data.len() as u32;
+    let file_name_bytes = file_name.as_bytes();
+
+    let local_header_offset = buf.len() as u32;
+
+    // Local file header signature
+    buf.write_all(&[0x50, 0x4b, 0x03, 0x04]).map_err(|e| e.to_string())?;
+    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version needed
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // general purpose flags
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // compression method (store)
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // last mod time
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // last mod date
+    buf.write_all(&crc.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&compressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&uncompressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&(file_name_bytes.len() as u16).to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // extra field length
+    buf.write_all(file_name_bytes).map_err(|e| e.to_string())?;
+    buf.write_all(&file_data).map_err(|e| e.to_string())?;
+
+    // Central directory header
+    let cd_offset = buf.len() as u32;
+    buf.write_all(&[0x50, 0x4b, 0x01, 0x02]).map_err(|e| e.to_string())?;
+    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version made by
+    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version needed
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // flags
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // compression
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // mod time
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // mod date
+    buf.write_all(&crc.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&compressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&uncompressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&(file_name_bytes.len() as u16).to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // extra field length
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // comment length
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // disk number
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // internal attrs
+    buf.write_all(&0u32.to_le_bytes()).map_err(|e| e.to_string())?;  // external attrs
+    buf.write_all(&local_header_offset.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(file_name_bytes).map_err(|e| e.to_string())?;
+
+    let cd_size = (buf.len() as u32) - cd_offset;
+
+    // End of central directory
+    buf.write_all(&[0x50, 0x4b, 0x05, 0x06]).map_err(|e| e.to_string())?;
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // disk number
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // cd disk
+    buf.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?;  // entries on disk
+    buf.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?;  // total entries
+    buf.write_all(&cd_size.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&cd_offset.to_le_bytes()).map_err(|e| e.to_string())?;
+    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // comment length
+
+    Ok(buf)
+}
+
+/// Simple CRC-32 (IEEE 802.3) for ZIP.
+fn crc32_hash(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
+}
+
 /// Deploy metadata to Microsoft Partner Center.
 pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let (tx, rx) = mpsc::channel();
@@ -686,6 +818,8 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let support_zip = state.microsoft.support_zip.clone();
     let support_city = state.microsoft.support_city.clone();
     let support_country = state.microsoft.support_country.clone();
+    let source_dir = state.deploy.source_dir.clone();
+    let installer_type_idx = state.microsoft.installer_type;
 
     thread::spawn(move || {
         let _ = tx.send(DeployMsg::Log("Starting Microsoft Store deploy...".into()));
@@ -831,7 +965,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                 "meetAccessibilityGuidelines": true,
                 "canInstallOnRemovableMedia": true,
                 "automaticBackupEnabled": true,
-                "applicationPackages": [],
+                "applicationPackages": build_application_packages(&source_dir, installer_type_idx),
                 "contactInfo": {
                     "supportEmail": contact_email,
                     "supportUrl": support_url,
@@ -869,14 +1003,66 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             return;
         }
 
-        // 3. Update listings per language (using initial_listings built above)
+        // 3. Upload package to Azure Blob Storage if source_dir is set
+        if !source_dir.is_empty() {
+            let file_upload_url = submission_body["fileUploadUrl"].as_str().unwrap_or("").to_string();
+            if file_upload_url.is_empty() {
+                let _ = tx.send(DeployMsg::Error("No fileUploadUrl in submission response. Cannot upload package.".into()));
+                return;
+            }
+
+            let pkg_path = match resolve_binary_from_source_dir(&source_dir) {
+                Some(p) => p,
+                None => {
+                    let _ = tx.send(DeployMsg::Error(format!("No binary found in {}/target/release/", source_dir)));
+                    return;
+                }
+            };
+
+            let _ = tx.send(DeployMsg::Log(format!("Creating ZIP from {}...", pkg_path.display())));
+            match create_package_zip(&pkg_path) {
+                Ok(zip_data) => {
+                    let _ = tx.send(DeployMsg::Log(format!("ZIP size: {} bytes. Uploading to Azure Blob...", zip_data.len())));
+                    let upload_resp = client.put(&file_upload_url)
+                        .header("x-ms-blob-type", "BlockBlob")
+                        .header("Content-Type", "application/zip")
+                        .body(zip_data)
+                        .send();
+
+                    match upload_resp {
+                        Ok(r) => {
+                            let status = r.status();
+                            if status.is_success() {
+                                let _ = tx.send(DeployMsg::Log("Package uploaded successfully.".into()));
+                            } else {
+                                let text = r.text().unwrap_or_default();
+                                let _ = tx.send(DeployMsg::Error(format!("Package upload failed ({}): {}", status, text)));
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(DeployMsg::Error(format!("Package upload failed: {}", e)));
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(DeployMsg::Error(format!("Failed to create ZIP: {}", e)));
+                    return;
+                }
+            }
+        } else {
+            let _ = tx.send(DeployMsg::Log("No package file set — submitting metadata only.".into()));
+        }
+
+        // 4. Update listings per language (using initial_listings built above)
         let _ = tx.send(DeployMsg::Log("Updating listings...".into()));
         submission_body["listings"] = serde_json::Value::Object(initial_listings);
         for lang in &languages {
             let _ = tx.send(DeployMsg::Log(format!("  Set listing for {}", microsoft_locale(lang))));
         }
 
-        // 4. Fix required fields before PUT
+        // 5. Fix required fields before PUT
         submission_body["targetPublishMode"] = json!("Immediate");
         submission_body["targetPublishDate"] = json!("");
         submission_body["visibility"] = json!("Public");

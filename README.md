@@ -125,6 +125,7 @@ Reads from Common + Windows tabs and via the Partner Center API:
 - Sets pricing (Free), visibility (Public), publish mode (Immediate)
 - Sends contactInfo (support email, phone, website, privacy URL, company address) for the Properties page
 - Updates per-language listings (title, description, keywords, features, search terms, release notes, URLs)
+- Uploads binary package: set the **Source directory** to your project root — the binary is resolved from `target/release/` and version from `Cargo.toml`, then uploaded as a ZIP to Azure Blob Storage
 - Commits submission for Microsoft review
 
 ### GitHub Secrets & Workflow

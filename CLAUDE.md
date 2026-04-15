@@ -19,7 +19,7 @@ cargo run            # build and launch GUI
 - `src/main.rs` — eframe entry point, `StoreTemplateApp` struct, top-level render loop with header (store/language checkboxes), tab bar, central scroll area, and footer (save/load/clear buttons). Handles icon texture loading, auto-save polling, and app icon for taskbar
 - `src/icon_gen.rs` — AI icon generation via xAI Grok API (`grok-imagine-image` model). Supports new generation and iteration on existing icons via `/images/generations` and `/images/edits` endpoints. Post-processes images to make background transparent. Saves icons to `png/` directory
 - `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`. `SavedState` for JSON serialization. Auto-save/load functions for `json/` directory
-- `src/widgets.rs` — reusable form widget helpers: `text_field`, `multiline_field`, `choice_field`, `bool_field`, `list_field`, `path_field`, `url_field`, `email_field`, `per_language_text`, `per_language_multiline`, `per_language_list`
+- `src/widgets.rs` — reusable form widget helpers: `text_field`, `multiline_field`, `choice_field`, `bool_field`, `list_field`, `path_field`, `dir_field`, `url_field`, `email_field`, `per_language_text`, `per_language_multiline`, `per_language_list`
 - `src/languages.rs` — `LANGUAGES` constant (20 ISO codes with display names)
 - `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog and also generates `.github/workflows/release.yml`
 - `src/workflow.rs` — `build_workflow()` generates GitHub Actions release workflow YAML based on selected stores (build jobs for macOS/iOS/Windows/Android/AppImage + create-release job)
@@ -32,10 +32,10 @@ cargo run            # build and launch GUI
 - `src/deploy.rs` — Store API integration for one-click deployment:
   - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
   - `deploy_apple()` — App Store Connect API: JWT auth (ES256), bundle ID registration, app info/version localizations (per-language), provisioning profile creation
-  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), dynamic applicationCategory from state, contactInfo (phone/address/email for Properties page), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate)
+  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), dynamic applicationCategory from state, contactInfo (phone/address/email for Properties page), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate). Supports binary package upload: resolves binary from source project directory, creates ZIP in memory, uploads to Azure Blob `fileUploadUrl`
   - `deploy_github()` — sets secrets via `gh` CLI, generates and pushes release.yml workflow
   - All deploy functions run in background threads with `mpsc` channel (same pattern as `icon_gen.rs`)
-  - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo), persisted with auto-save
+  - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo, source directory for binary upload), persisted with auto-save
 
 ## macOS Build & Release Infrastructure
 

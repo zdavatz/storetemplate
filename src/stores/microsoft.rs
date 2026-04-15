@@ -91,4 +91,27 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
     widgets::text_field(ui, "Minimum OS", &mut state.min_os, None, false);
     widgets::choice_field(ui, "Minimum RAM", &mut state.min_ram, RAM_CHOICES);
     widgets::text_field(ui, "Minimum disk space", &mut state.min_disk, None, false);
+
+}
+
+pub fn extract_cargo_version(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("version") && trimmed.contains('=') {
+            let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
+pub fn extract_cargo_name(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("name") && trimmed.contains('=') {
+            let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
+            return Some(val.to_string());
+        }
+    }
+    None
 }
