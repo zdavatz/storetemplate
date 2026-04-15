@@ -665,6 +665,8 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
         let sub_resp = client.post(format!("{}/submissions", pc_base))
             .header("Authorization", &auth)
             .header("Content-Type", "application/json")
+            .header("Content-Length", "0")
+            .body("")
             .send();
 
         let (submission_id, mut submission_body) = match sub_resp {
