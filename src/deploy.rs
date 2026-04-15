@@ -494,7 +494,58 @@ pub fn deploy_apple(state: &AppState) -> DeployReceiver {
                 .send();
         }
 
-        // 7. Create provisioning profile
+        // 7. Set pricing to Free (USD $0)
+        let _ = tx.send(DeployMsg::Log("Setting price to Free...".into()));
+        let price_body = json!({
+            "data": {
+                "type": "appPriceSchedules",
+                "relationships": {
+                    "app": {
+                        "data": { "type": "apps", "id": app_id }
+                    },
+                    "manualPrices": {
+                        "data": [{
+                            "type": "appPrices",
+                            "id": "${price1}"
+                        }]
+                    },
+                    "baseTerritory": {
+                        "data": { "type": "territories", "id": "USA" }
+                    }
+                }
+            },
+            "included": [{
+                "type": "appPrices",
+                "id": "${price1}",
+                "relationships": {
+                    "appPriceTier": {
+                        "data": { "type": "appPriceTiers", "id": "0" }
+                    },
+                    "startDate": serde_json::Value::Null
+                }
+            }]
+        });
+        match client.post(format!("{}/appPriceSchedules", base))
+            .header("Authorization", &auth)
+            .header("Content-Type", "application/json")
+            .json(&price_body)
+            .send()
+        {
+            Ok(r) => {
+                let status = r.status();
+                if status.is_success() {
+                    let _ = tx.send(DeployMsg::Log("Price set to Free.".into()));
+                } else {
+                    let body: serde_json::Value = r.json().unwrap_or_default();
+                    let _ = tx.send(DeployMsg::Log(format!("Pricing note: {} - {}", status, body)));
+                }
+            }
+            Err(e) => {
+                let _ = tx.send(DeployMsg::Log(format!("Pricing request failed: {}", e)));
+            }
+        }
+
+        // 8. Create provisioning profile
         let _ = tx.send(DeployMsg::Log("Creating provisioning profile...".into()));
         let cert_url = format!("{}/certificates?filter%5BcertificateType%5D=DISTRIBUTION", base);
         if let Ok(r) = client.get(&cert_url).header("Authorization", &auth).send() {
