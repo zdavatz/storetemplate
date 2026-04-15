@@ -571,7 +571,7 @@ pub fn deploy_apple(state: &AppState) -> DeployReceiver {
 
         // 8. Create provisioning profile
         let _ = tx.send(DeployMsg::Log("Creating provisioning profile...".into()));
-        let cert_url = format!("{}/certificates?filter%5BcertificateType%5D=DISTRIBUTION", base);
+        let cert_url = format!("{}/certificates?filter%5BcertificateType%5D=MAC_APP_DISTRIBUTION", base);
         if let Ok(r) = client.get(&cert_url).header("Authorization", &auth).send() {
             let body: serde_json::Value = r.json().unwrap_or_default();
             if let Some(cert_id) = body["data"][0]["id"].as_str() {
