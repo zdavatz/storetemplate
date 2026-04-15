@@ -1,3 +1,4 @@
+mod deploy;
 mod icon_gen;
 mod languages;
 mod state;
@@ -68,6 +69,32 @@ impl eframe::App for StoreTemplateApp {
                 }
                 ctx.request_repaint();
             }
+        }
+
+        // Poll deploy result
+        let mut deploy_done = false;
+        if let Some(ref rx) = self.state.deploy_receiver {
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    deploy::DeployMsg::Log(line) => {
+                        self.state.deploy_log.push(line);
+                    }
+                    deploy::DeployMsg::Done => {
+                        self.state.deploy_log.push("--- Done ---".to_string());
+                        self.state.deploy_running = false;
+                        deploy_done = true;
+                    }
+                    deploy::DeployMsg::Error(e) => {
+                        self.state.deploy_log.push(format!("ERROR: {}", e));
+                        self.state.deploy_running = false;
+                        deploy_done = true;
+                    }
+                }
+                ctx.request_repaint();
+            }
+        }
+        if deploy_done {
+            self.state.deploy_receiver = None;
         }
 
         // Load/reload icon texture when the path changes or a new icon was generated
@@ -146,6 +173,9 @@ impl eframe::App for StoreTemplateApp {
                         }
                         if self.state.store_github {
                             ui.selectable_value(&mut self.state.active_tab, Tab::GitHub, "GitHub");
+                        }
+                        if self.state.any_store_selected() {
+                            ui.selectable_value(&mut self.state.active_tab, Tab::Deploy, "Deploy");
                         }
                     });
                 });
@@ -247,6 +277,9 @@ impl eframe::App for StoreTemplateApp {
                     Tab::GitHub => {
                         stores::github::ui_section(ui, &mut self.state.github);
                     }
+                    Tab::Deploy => {
+                        render_deploy_tab(ui, &mut self.state);
+                    }
                 }
 
                 ui.add_space(20.0);
@@ -257,6 +290,121 @@ impl eframe::App for StoreTemplateApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         state::auto_save(&self.state);
     }
+}
+
+/// Render the Deploy tab UI.
+fn render_deploy_tab(ui: &mut egui::Ui, state: &mut AppState) {
+    ui.heading("Deploy");
+    ui.add_space(4.0);
+
+    // --- Auto-fill credentials button ---
+    ui.horizontal(|ui| {
+        if ui.button("Auto-fill Credentials").clicked() {
+            let msg = deploy::autofill_credentials(state);
+            state.deploy_log.push(msg);
+        }
+        ui.label("(from ~/.apple/credentials.json + gh CLI)");
+    });
+    ui.add_space(8.0);
+
+    // --- Apple App Store Connect credentials ---
+    if state.has_apple() {
+        ui.separator();
+        ui.heading("Apple App Store Connect");
+        ui.add_space(4.0);
+        widgets::path_field(ui, "API Key (.p8 file)", &mut state.deploy.apple_api_key_path);
+        widgets::text_field(ui, "Key ID", &mut state.deploy.apple_api_key_id, None, true);
+        widgets::text_field(ui, "Issuer ID", &mut state.deploy.apple_api_issuer_id, None, true);
+        ui.add_space(4.0);
+
+        ui.add_enabled_ui(!state.deploy_running, |ui| {
+            if ui.button("Deploy to App Store Connect").clicked() {
+                state.deploy_log.clear();
+                state.deploy_running = true;
+                state.deploy_receiver = Some(deploy::deploy_apple(state));
+            }
+        });
+        ui.add_space(8.0);
+    }
+
+    // --- Microsoft Partner Center credentials ---
+    if state.store_windows {
+        ui.separator();
+        ui.heading("Microsoft Partner Center");
+        ui.add_space(4.0);
+        widgets::text_field(ui, "Azure Tenant ID", &mut state.deploy.azure_tenant_id, None, true);
+        widgets::text_field(ui, "Azure Client ID", &mut state.deploy.azure_client_id, None, true);
+        widgets::text_field(ui, "Azure Client Secret", &mut state.deploy.azure_client_secret, None, true);
+        ui.add_space(4.0);
+
+        ui.add_enabled_ui(!state.deploy_running, |ui| {
+            if ui.button("Deploy to Microsoft Store").clicked() {
+                state.deploy_log.clear();
+                state.deploy_running = true;
+                state.deploy_receiver = Some(deploy::deploy_microsoft(state));
+            }
+        });
+        ui.add_space(8.0);
+    }
+
+    // --- GitHub credentials ---
+    if state.store_github {
+        ui.separator();
+        ui.heading("GitHub Secrets & Workflow");
+        ui.add_space(4.0);
+        widgets::text_field(ui, "GitHub PAT", &mut state.deploy.github_pat, None, false);
+        widgets::text_field(ui, "Repository (owner/repo)", &mut state.deploy.github_repo, None, true);
+        ui.add_space(4.0);
+
+        ui.add_enabled_ui(!state.deploy_running, |ui| {
+            if ui.button("Setup GitHub Secrets & Push Workflow").clicked() {
+                state.deploy_log.clear();
+                state.deploy_running = true;
+                state.deploy_receiver = Some(deploy::deploy_github(state));
+            }
+        });
+        ui.add_space(8.0);
+    }
+
+    // --- Log output ---
+    ui.separator();
+    ui.heading("Deploy Log");
+    ui.add_space(4.0);
+
+    if state.deploy_running {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label("Deploy in progress...");
+        });
+    }
+
+    if !state.deploy_log.is_empty() {
+        egui::Frame::new()
+            .fill(egui::Color32::from_gray(245))
+            .corner_radius(egui::CornerRadius::same(4))
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                for line in &state.deploy_log {
+                    if line.starts_with("ERROR:") {
+                        ui.colored_label(egui::Color32::RED, line);
+                    } else if line.contains("complete") || line.contains("Done") {
+                        ui.colored_label(egui::Color32::DARK_GREEN, line);
+                    } else {
+                        ui.label(line);
+                    }
+                }
+            });
+    }
+
+    if !state.deploy_log.is_empty() && !state.deploy_running {
+        ui.add_space(4.0);
+        if ui.button("Clear Log").clicked() {
+            state.deploy_log.clear();
+        }
+    }
+
+    // Extra space so content is not hidden behind footer
+    ui.add_space(60.0);
 }
 
 fn load_app_icon() -> Option<egui::IconData> {

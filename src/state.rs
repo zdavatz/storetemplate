@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::icon_gen::IconReceiver;
+use crate::deploy::DeployReceiver;
 
 fn empty_lang_map() -> HashMap<String, String> {
     HashMap::new()
@@ -26,6 +27,7 @@ pub struct AppState {
     pub google_play: GooglePlayState,
     pub microsoft: MicrosoftState,
     pub github: GithubState,
+    pub deploy: DeployState,
 
     // UI state
     pub active_tab: Tab,
@@ -36,6 +38,11 @@ pub struct AppState {
     // Icon generation
     pub icon_gen_receiver: Option<IconReceiver>,
     pub icon_gen_status: Option<String>,
+
+    // Deploy
+    pub deploy_log: Vec<String>,
+    pub deploy_running: bool,
+    pub deploy_receiver: Option<DeployReceiver>,
 
     // Tracks the last app name we auto-saved under
     pub last_saved_name: String,
@@ -56,12 +63,16 @@ impl Default for AppState {
             google_play: GooglePlayState::default(),
             microsoft: MicrosoftState::default(),
             github: GithubState::default(),
+            deploy: DeployState::default(),
             active_tab: Tab::default(),
             save_status: None,
             save_status_time: None,
             validation_errors: Vec::new(),
             icon_gen_receiver: None,
             icon_gen_status: None,
+            deploy_log: Vec::new(),
+            deploy_running: false,
+            deploy_receiver: None,
             last_saved_name: String::new(),
         }
     }
@@ -75,6 +86,7 @@ pub enum Tab {
     Android,
     Windows,
     GitHub,
+    Deploy,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -279,6 +291,37 @@ impl Default for GithubState {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeployState {
+    // Apple App Store Connect
+    pub apple_api_key_path: String,
+    pub apple_api_key_id: String,
+    pub apple_api_issuer_id: String,
+    // Microsoft Partner Center (Azure AD)
+    pub azure_tenant_id: String,
+    pub azure_client_id: String,
+    pub azure_client_secret: String,
+    // GitHub
+    pub github_pat: String,
+    pub github_repo: String,
+}
+
+impl Default for DeployState {
+    fn default() -> Self {
+        Self {
+            apple_api_key_path: String::new(),
+            apple_api_key_id: String::new(),
+            apple_api_issuer_id: String::new(),
+            azure_tenant_id: String::new(),
+            azure_client_id: String::new(),
+            azure_client_secret: String::new(),
+            github_pat: String::new(),
+            github_repo: String::new(),
+        }
+    }
+}
+
 /// Serializable snapshot of the full app state (excludes transient UI fields).
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -294,6 +337,7 @@ pub struct SavedState {
     pub google_play: GooglePlayState,
     pub microsoft: MicrosoftState,
     pub github: GithubState,
+    pub deploy: DeployState,
 }
 
 impl AppState {
@@ -345,6 +389,7 @@ impl AppState {
             google_play: serde_json::from_str(&serde_json::to_string(&self.google_play).unwrap()).unwrap(),
             microsoft: serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap(),
             github: serde_json::from_str(&serde_json::to_string(&self.github).unwrap()).unwrap(),
+            deploy: serde_json::from_str(&serde_json::to_string(&self.deploy).unwrap()).unwrap(),
         }
     }
 
@@ -360,6 +405,7 @@ impl AppState {
         self.google_play = saved.google_play;
         self.microsoft = saved.microsoft;
         self.github = saved.github;
+        self.deploy = saved.deploy;
         self.update_active_languages();
     }
 }
