@@ -32,12 +32,12 @@
     "bundle_id": "com.ywesee.swissdamed2sqlite",
     "version": "0.1.2",
     "short_description": {
-      "de": "",
-      "en": "Export Data from Swissdamed to SQlite or CSV"
+      "en": "Export Data from Swissdamed to SQlite or CSV",
+      "de": ""
     },
     "full_description": {
-      "de": "Swissdamed Daten Export nach SQlite und CSV.",
-      "en": "Export Data from Swissdamed to SQlite or CSV with ease."
+      "en": "Export Data from Swissdamed to SQlite or CSV with ease.",
+      "de": "Swissdamed Daten Export nach SQlite und CSV."
     },
     "keywords": {
       "de": "Swissdamed, SQlite",
@@ -104,8 +104,8 @@
       "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen."
     },
     "search_terms": {
-      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen.",
-      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market."
+      "en": "Swissdamed2Sqlite - make sense of the Swiss Medical Device market.",
+      "de": "Swissdamed2Sqlite - Schweizer MedTech Markt durchschauen."
     },
     "certification_notes": "",
     "additional_license_terms": "",
