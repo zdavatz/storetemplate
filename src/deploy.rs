@@ -593,6 +593,9 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let support_url = state.common.support_url.clone();
     let privacy_url = state.common.privacy_policy_url.clone();
     let app_name = state.common.app_name.clone();
+    let display_name = state.common.display_name.clone();
+    let copyright = state.common.copyright.clone();
+    let website_url = state.common.website_url.clone();
     let whats_new = state.microsoft.whats_new.clone();
     let product_features = state.microsoft.product_features.clone();
     let search_terms = state.microsoft.search_terms.clone();
@@ -662,12 +665,68 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             }
         }
 
-        let sub_resp = client.post(format!("{}/submissions", pc_base))
+        // Build initial listings for the POST (required for first submission)
+        let mut initial_listings = serde_json::Map::new();
+        for lang in &languages {
+            let locale = microsoft_locale(lang);
+            let desc = full_desc.get(lang).cloned().unwrap_or_default();
+            let short = short_desc.get(lang).cloned().unwrap_or_default();
+            let kw_str = keywords.get(lang).cloned().unwrap_or_default();
+            let kw_list: Vec<String> = kw_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let wn = whats_new.get(lang).cloned().unwrap_or_default();
+            let feat_str = product_features.get(lang).cloned().unwrap_or_default();
+            let feat_list: Vec<String> = feat_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let st_str = search_terms.get(lang).cloned().unwrap_or_default();
+            let st_list: Vec<String> = st_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+
+            initial_listings.insert(locale.to_string(), json!({
+                "baseListing": {
+                    "title": app_name,
+                    "description": if desc.is_empty() { &display_name } else { &desc },
+                    "shortDescription": short,
+                    "releaseNotes": wn,
+                    "keywords": kw_list,
+                    "features": feat_list,
+                    "searchTerms": st_list,
+                    "copyrightAndTrademarkInfo": format!("Copyright 2026 {}", copyright),
+                    "supportContact": support_url,
+                    "privacyPolicy": privacy_url,
+                    "websiteUrl": website_url
+                }
+            }));
+        }
+
+        // First try: POST with empty body (clones last published submission)
+        // If that fails (no previous submission), retry with listings included
+        let sub_resp_result = client.post(format!("{}/submissions", pc_base))
             .header("Authorization", &auth)
-            .header("Content-Type", "application/json")
             .header("Content-Length", "0")
-            .body("")
             .send();
+
+        let sub_resp = match sub_resp_result {
+            Ok(r) if r.status().is_success() => Ok(r),
+            _ => {
+                let _ = tx.send(DeployMsg::Log("First submission — including listings in request...".into()));
+                client.post(format!("{}/submissions", pc_base))
+                    .header("Authorization", &auth)
+                    .json(&json!({
+                        "listings": initial_listings,
+                        "applicationCategory": "BooksAndReference_EReader",
+                        "allowTargetFutureDeviceFamilies": {
+                            "Desktop": true,
+                            "Mobile": false,
+                            "Xbox": false,
+                            "Holographic": false
+                        },
+                        "hardwarePreferences": ["Keyboard", "Mouse"],
+                        "hasExternalInAppProducts": false,
+                        "meetAccessibilityGuidelines": true,
+                        "canInstallOnRemovableMedia": true,
+                        "automaticBackupEnabled": true
+                    }))
+                    .send()
+            }
+        };
 
         let (submission_id, mut submission_body) = match sub_resp {
             Ok(r) => {
