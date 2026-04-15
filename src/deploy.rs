@@ -496,53 +496,77 @@ pub fn deploy_apple(state: &AppState) -> DeployReceiver {
 
         // 7. Set pricing to Free (USD $0)
         let _ = tx.send(DeployMsg::Log("Setting price to Free...".into()));
-        let price_body = json!({
-            "data": {
-                "type": "appPriceSchedules",
-                "relationships": {
-                    "app": {
-                        "data": { "type": "apps", "id": app_id }
+        // First, find the Free price point for USA
+        let pp_url = format!("{}/apps/{}/appPricePoints?filter%5Bterritory%5D=USA&include=territory&limit=1", base, app_id);
+        let free_price_point_id = match client.get(&pp_url).header("Authorization", &auth).send() {
+            Ok(r) => {
+                let body: serde_json::Value = r.json().unwrap_or_default();
+                // The first price point with customerPrice "0.0" is the free tier
+                body["data"].as_array()
+                    .and_then(|arr| arr.iter().find(|pp| {
+                        pp["attributes"]["customerPrice"].as_str().map(|p| p == "0.0" || p == "0").unwrap_or(false)
+                    }))
+                    .and_then(|pp| pp["id"].as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| body["data"][0]["id"].as_str().map(|s| s.to_string()))
+            }
+            Err(_) => None,
+        };
+
+        if let Some(pp_id) = free_price_point_id {
+            let _ = tx.send(DeployMsg::Log(format!("Found free price point: {}", pp_id)));
+            let price_body = json!({
+                "data": {
+                    "type": "appPriceSchedules",
+                    "relationships": {
+                        "app": {
+                            "data": { "type": "apps", "id": app_id }
+                        },
+                        "manualPrices": {
+                            "data": [{
+                                "type": "appPrices",
+                                "id": "${price1}"
+                            }]
+                        },
+                        "baseTerritory": {
+                            "data": { "type": "territories", "id": "USA" }
+                        }
+                    }
+                },
+                "included": [{
+                    "type": "appPrices",
+                    "id": "${price1}",
+                    "attributes": {
+                        "startDate": serde_json::Value::Null
                     },
-                    "manualPrices": {
-                        "data": [{
-                            "type": "appPrices",
-                            "id": "${price1}"
-                        }]
-                    },
-                    "baseTerritory": {
-                        "data": { "type": "territories", "id": "USA" }
+                    "relationships": {
+                        "appPricePoint": {
+                            "data": { "type": "appPricePoints", "id": pp_id }
+                        }
+                    }
+                }]
+            });
+            match client.post(format!("{}/appPriceSchedules", base))
+                .header("Authorization", &auth)
+                .header("Content-Type", "application/json")
+                .json(&price_body)
+                .send()
+            {
+                Ok(r) => {
+                    let status = r.status();
+                    if status.is_success() {
+                        let _ = tx.send(DeployMsg::Log("Price set to Free.".into()));
+                    } else {
+                        let body: serde_json::Value = r.json().unwrap_or_default();
+                        let _ = tx.send(DeployMsg::Log(format!("Pricing note: {} - {}", status, body)));
                     }
                 }
-            },
-            "included": [{
-                "type": "appPrices",
-                "id": "${price1}",
-                "relationships": {
-                    "appPriceTier": {
-                        "data": { "type": "appPriceTiers", "id": "0" }
-                    },
-                    "startDate": serde_json::Value::Null
-                }
-            }]
-        });
-        match client.post(format!("{}/appPriceSchedules", base))
-            .header("Authorization", &auth)
-            .header("Content-Type", "application/json")
-            .json(&price_body)
-            .send()
-        {
-            Ok(r) => {
-                let status = r.status();
-                if status.is_success() {
-                    let _ = tx.send(DeployMsg::Log("Price set to Free.".into()));
-                } else {
-                    let body: serde_json::Value = r.json().unwrap_or_default();
-                    let _ = tx.send(DeployMsg::Log(format!("Pricing note: {} - {}", status, body)));
+                Err(e) => {
+                    let _ = tx.send(DeployMsg::Log(format!("Pricing request failed: {}", e)));
                 }
             }
-            Err(e) => {
-                let _ = tx.send(DeployMsg::Log(format!("Pricing request failed: {}", e)));
-            }
+        } else {
+            let _ = tx.send(DeployMsg::Log("Could not find free price point. Set pricing manually.".into()));
         }
 
         // 8. Create provisioning profile
