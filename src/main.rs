@@ -335,36 +335,9 @@ fn render_deploy_tab(ui: &mut egui::Ui, state: &mut AppState) {
         widgets::text_field(ui, "Azure Tenant ID", &mut state.deploy.azure_tenant_id, None, true);
         widgets::text_field(ui, "Azure Client ID", &mut state.deploy.azure_client_id, None, true);
         widgets::text_field(ui, "Azure Client Secret", &mut state.deploy.azure_client_secret, None, true);
-        ui.add_space(8.0);
-
-        ui.label("Source project directory (for binary upload). Version and binary are read from Cargo.toml / target/release/.");
-        widgets::dir_field(ui, "Source directory", &mut state.deploy.source_dir);
-
-        // Show detected version and binary
-        if !state.deploy.source_dir.is_empty() {
-            let source = std::path::Path::new(&state.deploy.source_dir);
-            let cargo_toml = source.join("Cargo.toml");
-            if cargo_toml.exists() {
-                if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
-                    if let Some(ver) = stores::microsoft::extract_cargo_version(&content) {
-                        ui.label(format!("  Detected version: {}", ver));
-                    }
-                    if let Some(name) = stores::microsoft::extract_cargo_name(&content) {
-                        let bin_path = source.join("target").join("release").join(&name);
-                        let exe_path = source.join("target").join("release").join(format!("{}.exe", name));
-                        if bin_path.exists() {
-                            ui.colored_label(egui::Color32::DARK_GREEN, format!("  Binary found: {}", bin_path.display()));
-                        } else if exe_path.exists() {
-                            ui.colored_label(egui::Color32::DARK_GREEN, format!("  Binary found: {}", exe_path.display()));
-                        } else {
-                            ui.colored_label(egui::Color32::RED, format!("  Binary not found at target/release/{}", name));
-                        }
-                    }
-                }
-            } else {
-                ui.colored_label(egui::Color32::RED, "  No Cargo.toml found in this directory.");
-            }
-        }
+        widgets::text_field(ui, "Seller / Account ID", &mut state.deploy.msstore_seller_id, None, true);
+        ui.label("Product ID is taken from the Windows tab (MS Store App ID, format: 9PXXXXXXXXXX).");
+        ui.label("Deploys text metadata only (properties + per-language listings). Binary is uploaded by the GitHub Actions release workflow.");
         ui.add_space(4.0);
 
         ui.add_enabled_ui(!state.deploy_running, |ui| {

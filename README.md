@@ -29,7 +29,7 @@ Each template includes the maximum metadata supported by each store's API:
 - **Common** (filled once, shared by all stores): app name, bundle/package ID (auto-suggested), descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
 - **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type
 - **Google Play**: package name (with link to Google Play Console), category, feature graphic, IARC content rating, release track
-- **Microsoft Store**: App ID (with link to Partner Center), support info (phone, address for Properties page), "What's new", product features, search terms, store logos, installer config, system requirements
+- **Microsoft Store**: Product ID (with link to Partner Center), category/subcategory, "What's new", product features, search terms, store logos, installer config, system requirements (Privacy URL, Support URL, Website deploy via the v2 API; phone/address must be set manually in Partner Center account settings)
 - **GitHub**: tag pattern, release notes template, draft/prerelease flags, build AppImage option, asset patterns
 
 ## Building
@@ -47,7 +47,7 @@ The binary is at `target/release/storetemplate.exe` (Windows) or `target/release
 Releases are automated via GitHub Actions. Push a tag to trigger a build:
 
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.2.2 && git push origin v1.2.2
 ```
 
 The CI pipeline produces:
@@ -118,15 +118,13 @@ Reads from Common + Apple tabs and via the App Store Connect API:
 
 ### Microsoft Partner Center
 
-Reads from Common + Windows tabs and via the Partner Center API:
-- Authenticates via Azure AD OAuth2
-- Deletes pending submission if exists, creates new submission with listings
-- Sets applicationCategory dynamically from Windows tab category + subcategory
-- Sets pricing (Free), visibility (Public), publish mode (Immediate)
-- Sends contactInfo (support email, phone, website, privacy URL, company address) for the Properties page
-- Updates per-language listings (title, description, keywords, features, search terms, release notes, URLs)
-- Uploads binary package: set the **Source directory** to your project root — the binary is resolved from `target/release/` and version from `Cargo.toml`, then uploaded as a ZIP to Azure Blob Storage
-- Commits submission for Microsoft review
+Uses the **Microsoft Store Submission API v2** (`api.store.microsoft.com/submission/v1`) for MSI/EXE apps. Reads from Common + Windows tabs and:
+- Authenticates via Microsoft Entra ID (OAuth2, scope `api.store.microsoft.com/.default`)
+- PATCHes Properties module: `privacyPolicyUrl`, `website`, `supportContactInfo`, `certificationNotes`, `category`, `subcategory`, `productDeclarations`
+- PATCHes per-language Listings: `description`, `shortDescription`, `whatsNew`, `productFeatures`, `searchTerms`, `additionalLicenseTerms`, `copyright`, `contactInfo`
+- Requires the `Seller / Account ID` header (set in the Deploy tab) plus the **Product ID** (the `9PXXXXXXXXXX` MS Store App ID set in the Windows tab)
+- **Text metadata only** — the binary (EXE/MSI) is uploaded by the generated GitHub Actions release workflow, not by this tool
+- **Not settable via the API:** phone number and company address — these must be entered once in Partner Center account settings
 
 ### GitHub Secrets & Workflow
 

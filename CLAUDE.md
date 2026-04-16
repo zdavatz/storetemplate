@@ -32,10 +32,10 @@ cargo run            # build and launch GUI
 - `src/deploy.rs` — Store API integration for one-click deployment:
   - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
   - `deploy_apple()` — App Store Connect API: JWT auth (ES256), bundle ID registration, app info/version localizations (per-language), provisioning profile creation
-  - `deploy_microsoft()` — Partner Center API: Azure AD OAuth2 token, submission create (with listings, pricing=Free, visibility=Public, publishMode=Immediate), dynamic applicationCategory from state, contactInfo (phone/address/email for Properties page), per-language listings update via PUT, commit. Handles first submission (no clone) and subsequent updates (delete pending + recreate). Supports binary package upload: resolves binary from source project directory, creates ZIP in memory, uploads to Azure Blob `fileUploadUrl`
+  - `deploy_microsoft()` — Microsoft Store Submission API **v2** (`api.store.microsoft.com/submission/v1/product/{productId}`). Entra ID OAuth2 token with `api.store.microsoft.com/.default` scope. PATCH `/metadata` with Properties module (privacyPolicyUrl, website, supportContactInfo, certificationNotes, category, subcategory, productDeclarations) and per-language Listings (description, shortDescription, whatsNew, productFeatures, searchTerms, additionalLicenseTerms, copyright, contactInfo). Requires `X-Seller-Account-Id` header. Metadata-only — binary upload is delegated to the GitHub Actions release workflow. Note: phone/company address are NOT settable via the API and must be entered in Partner Center account settings.
   - `deploy_github()` — sets secrets via `gh` CLI, generates and pushes release.yml workflow
   - All deploy functions run in background threads with `mpsc` channel (same pattern as `icon_gen.rs`)
-  - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, GitHub PAT/repo, source directory for binary upload), persisted with auto-save
+  - `DeployState` in `state.rs` holds credentials (Apple .p8 path/key ID/issuer ID, Azure tenant/client/secret, **MS Store seller ID**, GitHub PAT/repo), persisted with auto-save. Product ID for the v2 Microsoft API is reused from `MicrosoftState.msstore_app_id`.
 
 ## macOS Build & Release Infrastructure
 

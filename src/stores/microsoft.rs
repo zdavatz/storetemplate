@@ -48,7 +48,12 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
     ui.heading("Support Info (Properties)");
     ui.add_space(4.0);
 
-    ui.label("These fields appear on the Properties page in Partner Center.");
+    ui.colored_label(
+        egui::Color32::from_rgb(160, 80, 0),
+        "Note: phone and address are NOT settable via the Microsoft Store API. \
+         You must enter these once in Partner Center account settings. \
+         Privacy URL / Support contact / Website are set from the Common tab via the v2 API.",
+    );
     ui.add_space(4.0);
     widgets::text_field(ui, "Phone number", &mut state.contact_phone, None, false);
     widgets::text_field(ui, "Address line 1", &mut state.support_address1, None, false);
@@ -94,24 +99,3 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
 
 }
 
-pub fn extract_cargo_version(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("version") && trimmed.contains('=') {
-            let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
-            return Some(val.to_string());
-        }
-    }
-    None
-}
-
-pub fn extract_cargo_name(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("name") && trimmed.contains('=') {
-            let val = trimmed.split('=').nth(1)?.trim().trim_matches('"');
-            return Some(val.to_string());
-        }
-    }
-    None
-}

@@ -103,19 +103,6 @@ pub fn path_field(ui: &mut egui::Ui, label: &str, value: &mut String) {
     });
 }
 
-/// Directory path field with browse button (opens folder picker).
-pub fn dir_field(ui: &mut egui::Ui, label: &str, value: &mut String) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.text_edit_singleline(value);
-        if ui.button("Browse…").clicked() {
-            if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                *value = path.display().to_string();
-            }
-        }
-    });
-}
-
 /// URL field with validation hint.
 pub fn url_field(ui: &mut egui::Ui, label: &str, value: &mut String, required: bool) {
     ui.horizontal(|ui| {

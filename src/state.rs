@@ -315,6 +315,7 @@ pub struct DeployState {
     pub azure_tenant_id: String,
     pub azure_client_id: String,
     pub azure_client_secret: String,
+    pub msstore_seller_id: String,
     // GitHub
     pub github_pat: String,
     pub github_repo: String,
@@ -331,6 +332,7 @@ impl Default for DeployState {
             azure_tenant_id: String::new(),
             azure_client_id: String::new(),
             azure_client_secret: String::new(),
+            msstore_seller_id: String::new(),
             github_pat: String::new(),
             github_repo: String::new(),
             source_dir: String::new(),

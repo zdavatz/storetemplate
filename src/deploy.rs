@@ -656,180 +656,45 @@ fn microsoft_locale(lang: &str) -> &'static str {
     }
 }
 
-/// Resolve binary path from source directory.
-fn resolve_binary_from_source_dir(source_dir: &str) -> Option<std::path::PathBuf> {
-    let source = std::path::Path::new(source_dir);
-    let cargo_toml = source.join("Cargo.toml");
-    let content = std::fs::read_to_string(&cargo_toml).ok()?;
-    let name = crate::stores::microsoft::extract_cargo_name(&content)?;
-
-    // Try .exe first (Windows cross-compile), then plain binary
-    let exe_path = source.join("target").join("release").join(format!("{}.exe", name));
-    if exe_path.exists() {
-        return Some(exe_path);
-    }
-    let bin_path = source.join("target").join("release").join(&name);
-    if bin_path.exists() {
-        return Some(bin_path);
-    }
-    None
-}
-
-/// Build applicationPackages array for the submission.
-fn build_application_packages(source_dir: &str, _installer_type_idx: usize) -> serde_json::Value {
-    if source_dir.is_empty() {
-        return json!([]);
-    }
-    match resolve_binary_from_source_dir(source_dir) {
-        Some(path) => {
-            let file_name = path.file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "package.exe".to_string());
-            json!([{
-                "fileName": file_name,
-                "fileStatus": "PendingUpload",
-                "minimumDirectXVersion": "None",
-                "minimumSystemRam": "None"
-            }])
-        }
-        None => json!([])
-    }
-}
-
-/// Create a ZIP file in memory containing the package file.
-fn create_package_zip(pkg_path: &std::path::Path) -> Result<Vec<u8>, String> {
-    use std::io::{Write, Read};
-
-    let file_name = pkg_path.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .ok_or("Cannot determine filename")?;
-
-    let mut file_data = Vec::new();
-    std::fs::File::open(pkg_path)
-        .map_err(|e| format!("Cannot open {}: {}", pkg_path.display(), e))?
-        .read_to_end(&mut file_data)
-        .map_err(|e| format!("Cannot read {}: {}", pkg_path.display(), e))?;
-
-    // Build a ZIP archive in memory using a minimal ZIP implementation
-    let mut buf = Vec::new();
-
-    // Local file header
-    let crc = crc32_hash(&file_data);
-    let compressed_size = file_data.len() as u32;
-    let uncompressed_size = file_data.len() as u32;
-    let file_name_bytes = file_name.as_bytes();
-
-    let local_header_offset = buf.len() as u32;
-
-    // Local file header signature
-    buf.write_all(&[0x50, 0x4b, 0x03, 0x04]).map_err(|e| e.to_string())?;
-    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version needed
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // general purpose flags
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // compression method (store)
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // last mod time
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // last mod date
-    buf.write_all(&crc.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&compressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&uncompressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&(file_name_bytes.len() as u16).to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // extra field length
-    buf.write_all(file_name_bytes).map_err(|e| e.to_string())?;
-    buf.write_all(&file_data).map_err(|e| e.to_string())?;
-
-    // Central directory header
-    let cd_offset = buf.len() as u32;
-    buf.write_all(&[0x50, 0x4b, 0x01, 0x02]).map_err(|e| e.to_string())?;
-    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version made by
-    buf.write_all(&20u16.to_le_bytes()).map_err(|e| e.to_string())?; // version needed
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // flags
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // compression
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // mod time
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // mod date
-    buf.write_all(&crc.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&compressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&uncompressed_size.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&(file_name_bytes.len() as u16).to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // extra field length
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // comment length
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // disk number
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // internal attrs
-    buf.write_all(&0u32.to_le_bytes()).map_err(|e| e.to_string())?;  // external attrs
-    buf.write_all(&local_header_offset.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(file_name_bytes).map_err(|e| e.to_string())?;
-
-    let cd_size = (buf.len() as u32) - cd_offset;
-
-    // End of central directory
-    buf.write_all(&[0x50, 0x4b, 0x05, 0x06]).map_err(|e| e.to_string())?;
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // disk number
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // cd disk
-    buf.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?;  // entries on disk
-    buf.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?;  // total entries
-    buf.write_all(&cd_size.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&cd_offset.to_le_bytes()).map_err(|e| e.to_string())?;
-    buf.write_all(&0u16.to_le_bytes()).map_err(|e| e.to_string())?;  // comment length
-
-    Ok(buf)
-}
-
-/// Simple CRC-32 (IEEE 802.3) for ZIP.
-fn crc32_hash(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFF_FFFF;
-    for &byte in data {
-        crc ^= byte as u32;
-        for _ in 0..8 {
-            if crc & 1 != 0 {
-                crc = (crc >> 1) ^ 0xEDB8_8320;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    !crc
-}
-
-/// Deploy metadata to Microsoft Partner Center.
+/// Deploy text metadata to Microsoft Partner Center via the v2 Store Submission API
+/// (api.store.microsoft.com). Sets Properties (privacy URL, support contact, website,
+/// category, productDeclarations) and per-language Listings (description, whatsNew,
+/// productFeatures, searchTerms, etc.). Does NOT upload a binary — the GitHub Actions
+/// release workflow handles package upload.
 pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let (tx, rx) = mpsc::channel();
 
     let deploy = state.deploy.clone();
-    let app_id = state.microsoft.msstore_app_id.clone();
+    let product_id = state.microsoft.msstore_app_id.clone();
     let short_desc = state.common.short_description.clone();
     let full_desc = state.common.full_description.clone();
-    let keywords = state.common.keywords.clone();
     let support_url = state.common.support_url.clone();
     let privacy_url = state.common.privacy_policy_url.clone();
-    let app_name = state.common.app_name.clone();
-    let display_name = state.common.display_name.clone();
     let copyright = state.common.copyright.clone();
     let website_url = state.common.website_url.clone();
     let contact_email = state.common.contact_email.clone();
     let whats_new = state.microsoft.whats_new.clone();
     let product_features = state.microsoft.product_features.clone();
     let search_terms = state.microsoft.search_terms.clone();
+    let certification_notes = state.microsoft.certification_notes.clone();
+    let additional_license_terms = state.microsoft.additional_license_terms.clone();
     let languages = state.active_languages.clone();
-    // Category
     let category_idx = state.microsoft.category;
     let subcategory = state.microsoft.subcategory.clone();
-    // Support info (Properties page)
-    let contact_phone = state.microsoft.contact_phone.clone();
-    let support_address1 = state.microsoft.support_address1.clone();
-    let support_address2 = state.microsoft.support_address2.clone();
-    let support_zip = state.microsoft.support_zip.clone();
-    let support_city = state.microsoft.support_city.clone();
-    let support_country = state.microsoft.support_country.clone();
-    let source_dir = state.deploy.source_dir.clone();
-    let installer_type_idx = state.microsoft.installer_type;
 
     thread::spawn(move || {
-        let _ = tx.send(DeployMsg::Log("Starting Microsoft Store deploy...".into()));
+        let _ = tx.send(DeployMsg::Log("Starting Microsoft Store deploy (v2 API, metadata only)...".into()));
 
         if deploy.azure_tenant_id.is_empty() || deploy.azure_client_id.is_empty() || deploy.azure_client_secret.is_empty() {
             let _ = tx.send(DeployMsg::Error("Azure AD credentials not set. Provide Tenant ID, Client ID, and Client Secret.".into()));
             return;
         }
-        if app_id.is_empty() {
-            let _ = tx.send(DeployMsg::Error("MS Store App ID not set. Set it in the Windows tab.".into()));
+        if deploy.msstore_seller_id.is_empty() {
+            let _ = tx.send(DeployMsg::Error("Seller / Account ID not set. Provide it in the Deploy tab.".into()));
+            return;
+        }
+        if product_id.is_empty() {
+            let _ = tx.send(DeployMsg::Error("Product ID (MS Store App ID) not set. Set it in the Windows tab — format: 9PXXXXXXXXXX.".into()));
             return;
         }
 
@@ -838,20 +703,21 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             .build()
             .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
-        // 1. Get OAuth2 token
-        let _ = tx.send(DeployMsg::Log("Acquiring Azure AD token...".into()));
-        let token_url = format!("https://login.microsoftonline.com/{}/oauth2/token", deploy.azure_tenant_id);
+        // 1. Acquire Microsoft Entra ID access token (v2 endpoint + scope).
+        let _ = tx.send(DeployMsg::Log("Acquiring Microsoft Entra ID token...".into()));
+        let token_url = format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", deploy.azure_tenant_id);
         let token_resp = client.post(&token_url)
             .form(&[
                 ("grant_type", "client_credentials"),
                 ("client_id", &deploy.azure_client_id),
                 ("client_secret", &deploy.azure_client_secret),
-                ("resource", "https://manage.devcenter.microsoft.com"),
+                ("scope", "https://api.store.microsoft.com/.default"),
             ])
             .send();
 
         let access_token = match token_resp {
             Ok(r) => {
+                let status = r.status();
                 let body: serde_json::Value = r.json().unwrap_or_default();
                 match body["access_token"].as_str() {
                     Some(t) => {
@@ -859,7 +725,7 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
                         t.to_string()
                     }
                     None => {
-                        let _ = tx.send(DeployMsg::Error(format!("Token error: {}", body)));
+                        let _ = tx.send(DeployMsg::Error(format!("Token error ({}): {}", status, body)));
                         return;
                     }
                 }
@@ -867,252 +733,127 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
             Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Token request failed: {}", e))); return; }
         };
 
-        let pc_base = format!("https://manage.devcenter.microsoft.com/v1.0/my/applications/{}", app_id);
+        let api_base = format!("https://api.store.microsoft.com/submission/v1/product/{}", product_id);
         let auth = format!("Bearer {}", access_token);
+        let seller_id = deploy.msstore_seller_id.clone();
 
-        // 2. Create a new submission (or delete pending and recreate)
-        let _ = tx.send(DeployMsg::Log("Creating submission...".into()));
+        // 2. Build Properties module.
+        let categories = crate::stores::microsoft::CATEGORIES;
+        let category_name = categories.get(category_idx).copied().unwrap_or("UtilitiesAndTools");
+        let _ = tx.send(DeployMsg::Log(format!("Category: {} / {}", category_name, if subcategory.is_empty() { "<none>" } else { &subcategory })));
 
-        // Check for pending submission
-        let app_resp = client.get(&pc_base).header("Authorization", &auth).send();
-        if let Ok(r) = app_resp {
-            let body: serde_json::Value = r.json().unwrap_or_default();
-            if let Some(pending_id) = body["pendingApplicationSubmission"]["id"].as_str() {
-                let _ = tx.send(DeployMsg::Log(format!("Deleting pending submission: {}", pending_id)));
-                let _ = client.delete(format!("{}/submissions/{}", pc_base, pending_id))
-                    .header("Authorization", &auth)
-                    .send();
+        let support_contact_val = if !contact_email.is_empty() { contact_email.clone() } else { support_url.clone() };
+
+        let mut properties = serde_json::Map::new();
+        let has_privacy = !privacy_url.is_empty();
+        properties.insert("isPrivacyPolicyRequired".into(), json!(has_privacy));
+        if has_privacy {
+            properties.insert("privacyPolicyUrl".into(), json!(privacy_url));
+        }
+        if !website_url.is_empty() {
+            properties.insert("website".into(), json!(website_url));
+        }
+        if !support_contact_val.is_empty() {
+            properties.insert("supportContactInfo".into(), json!(support_contact_val));
+        }
+        if !certification_notes.is_empty() {
+            properties.insert("certificationNotes".into(), json!(certification_notes));
+        }
+        properties.insert("category".into(), json!(category_name));
+        if !subcategory.is_empty() {
+            properties.insert("subcategory".into(), json!(subcategory));
+        }
+        properties.insert("productDeclarations".into(), json!({
+            "dependsOnDriversOrNT": false,
+            "accessibilitySupport": false,
+            "penAndInkSupport": false
+        }));
+
+        // 3. PATCH properties module.
+        let _ = tx.send(DeployMsg::Log("Updating properties...".into()));
+        let patch_props = client.patch(format!("{}/metadata", api_base))
+            .header("Authorization", &auth)
+            .header("X-Seller-Account-Id", &seller_id)
+            .header("Content-Type", "application/json")
+            .json(&json!({ "properties": properties }))
+            .send();
+
+        match patch_props {
+            Ok(r) => {
+                let status = r.status();
+                let body: serde_json::Value = r.json().unwrap_or_default();
+                if status.is_success() && body["isSuccess"].as_bool().unwrap_or(false) {
+                    let _ = tx.send(DeployMsg::Log("Properties updated.".into()));
+                } else {
+                    let _ = tx.send(DeployMsg::Error(format!("Properties update failed ({}): {}", status, body)));
+                    return;
+                }
             }
+            Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Properties PATCH failed: {}", e))); return; }
         }
 
-        // Build initial listings for the POST (required for first submission)
-        let mut initial_listings = serde_json::Map::new();
+        // 4. PATCH listings, one per language.
         for lang in &languages {
             let locale = microsoft_locale(lang);
             let desc = full_desc.get(lang).cloned().unwrap_or_default();
             let short = short_desc.get(lang).cloned().unwrap_or_default();
-            let kw_str = keywords.get(lang).cloned().unwrap_or_default();
-            let kw_list: Vec<String> = kw_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
             let wn = whats_new.get(lang).cloned().unwrap_or_default();
-            let feat_str = product_features.get(lang).cloned().unwrap_or_default();
-            let feat_list: Vec<String> = feat_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-            let st_str = search_terms.get(lang).cloned().unwrap_or_default();
-            let st_list: Vec<String> = st_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let feat_list: Vec<String> = product_features.get(lang).cloned().unwrap_or_default()
+                .split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).take(20).collect();
+            let st_list: Vec<String> = search_terms.get(lang).cloned().unwrap_or_default()
+                .split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).take(7).collect();
 
-            let support_contact_val = if !contact_email.is_empty() {
-                contact_email.clone()
-            } else {
-                support_url.clone()
-            };
-
-            initial_listings.insert(locale.to_string(), json!({
-                "baseListing": {
-                    "title": app_name,
-                    "description": if desc.is_empty() { &display_name } else { &desc },
-                    "shortDescription": short,
-                    "releaseNotes": wn,
-                    "keywords": kw_list,
-                    "features": feat_list,
-                    "searchTerms": st_list,
-                    "copyrightAndTrademarkInfo": format!("Copyright 2026 {}", copyright),
-                    "supportContact": support_contact_val,
-                    "privacyPolicy": privacy_url,
-                    "websiteUrl": website_url
-                }
-            }));
-        }
-
-        // Wait for delete to propagate
-        std::thread::sleep(std::time::Duration::from_secs(2));
-
-        // Build applicationCategory from state
-        let categories = crate::stores::microsoft::CATEGORIES;
-        let cat_name = if category_idx < categories.len() {
-            categories[category_idx]
-        } else {
-            "UtilitiesAndTools"
-        };
-        let app_category = if subcategory.is_empty() {
-            cat_name.to_string()
-        } else {
-            format!("{}_{}", cat_name, subcategory)
-        };
-        let _ = tx.send(DeployMsg::Log(format!("Category: {}", app_category)));
-
-        // Create new submission with listings included
-        let sub_url = format!("{}/submissions", pc_base);
-        let _ = tx.send(DeployMsg::Log(format!("POST {}", sub_url)));
-        let sub_resp = client.post(&sub_url)
-            .header("Authorization", &auth)
-            .json(&json!({
-                "listings": initial_listings,
-                "pricing": {
-                    "trialPeriod": "NoFreeTrial",
-                    "marketSpecificPricings": {},
-                    "sales": [],
-                    "priceId": "Free"
-                },
-                "applicationCategory": app_category,
-                "allowTargetFutureDeviceFamilies": {
-                    "Desktop": true,
-                    "Mobile": false,
-                    "Xbox": false,
-                    "Holographic": false
-                },
-                "allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies": true,
-                "hardwarePreferences": ["Keyboard", "Mouse"],
-                "hasExternalInAppProducts": false,
-                "meetAccessibilityGuidelines": true,
-                "canInstallOnRemovableMedia": true,
-                "automaticBackupEnabled": true,
-                "applicationPackages": build_application_packages(&source_dir, installer_type_idx),
-                "contactInfo": {
-                    "supportEmail": contact_email,
-                    "supportUrl": support_url,
-                    "supportPhone": contact_phone,
-                    "websiteUrl": website_url,
-                    "privacyPolicyUrl": privacy_url,
-                    "companyAddress1": support_address1,
-                    "companyAddress2": support_address2,
-                    "companyPostalCode": support_zip,
-                    "companyCity": support_city,
-                    "companyCountry": support_country
-                }
-            }))
-            .send();
-
-        let (submission_id, mut submission_body) = match sub_resp {
-            Ok(r) => {
-                let status = r.status();
-                let text = r.text().unwrap_or_default();
-                let _ = tx.send(DeployMsg::Log(format!("Response: {} ({})", status, text.len())));
-                let body: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
-                if !status.is_success() {
-                    let _ = tx.send(DeployMsg::Error(format!("Create submission failed ({}): {}", status, body)));
-                    return;
-                }
-                let id = body["id"].as_str().unwrap_or("").to_string();
-                let _ = tx.send(DeployMsg::Log(format!("Submission created: {}", id)));
-                (id, body)
+            let mut listing = serde_json::Map::new();
+            listing.insert("language".into(), json!(locale));
+            if !desc.is_empty() {
+                listing.insert("description".into(), json!(desc));
             }
-            Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Create submission failed: {:?}", e))); return; }
-        };
-
-        if submission_id.is_empty() {
-            let _ = tx.send(DeployMsg::Error("No submission ID returned.".into()));
-            return;
-        }
-
-        // 3. Upload package to Azure Blob Storage if source_dir is set
-        if !source_dir.is_empty() {
-            let file_upload_url = submission_body["fileUploadUrl"].as_str().unwrap_or("").to_string();
-            if file_upload_url.is_empty() {
-                let _ = tx.send(DeployMsg::Error("No fileUploadUrl in submission response. Cannot upload package.".into()));
-                return;
+            if !short.is_empty() {
+                listing.insert("shortDescription".into(), json!(short));
+            }
+            if !wn.is_empty() {
+                listing.insert("whatsNew".into(), json!(wn));
+            }
+            if !feat_list.is_empty() {
+                listing.insert("productFeatures".into(), json!(feat_list));
+            }
+            if !st_list.is_empty() {
+                listing.insert("searchTerms".into(), json!(st_list));
+            }
+            if !additional_license_terms.is_empty() {
+                listing.insert("additionalLicenseTerms".into(), json!(additional_license_terms));
+            }
+            if !copyright.is_empty() {
+                listing.insert("copyright".into(), json!(copyright));
+            }
+            if !contact_email.is_empty() {
+                listing.insert("contactInfo".into(), json!(contact_email));
             }
 
-            let pkg_path = match resolve_binary_from_source_dir(&source_dir) {
-                Some(p) => p,
-                None => {
-                    let _ = tx.send(DeployMsg::Error(format!("No binary found in {}/target/release/", source_dir)));
-                    return;
-                }
-            };
+            let _ = tx.send(DeployMsg::Log(format!("Updating listing for {}...", locale)));
+            let patch_list = client.patch(format!("{}/metadata", api_base))
+                .header("Authorization", &auth)
+                .header("X-Seller-Account-Id", &seller_id)
+                .header("Content-Type", "application/json")
+                .json(&json!({ "listings": listing }))
+                .send();
 
-            let _ = tx.send(DeployMsg::Log(format!("Creating ZIP from {}...", pkg_path.display())));
-            match create_package_zip(&pkg_path) {
-                Ok(zip_data) => {
-                    let _ = tx.send(DeployMsg::Log(format!("ZIP size: {} bytes. Uploading to Azure Blob...", zip_data.len())));
-                    let upload_resp = client.put(&file_upload_url)
-                        .header("x-ms-blob-type", "BlockBlob")
-                        .header("Content-Type", "application/zip")
-                        .body(zip_data)
-                        .send();
-
-                    match upload_resp {
-                        Ok(r) => {
-                            let status = r.status();
-                            if status.is_success() {
-                                let _ = tx.send(DeployMsg::Log("Package uploaded successfully.".into()));
-                            } else {
-                                let text = r.text().unwrap_or_default();
-                                let _ = tx.send(DeployMsg::Error(format!("Package upload failed ({}): {}", status, text)));
-                                return;
-                            }
-                        }
-                        Err(e) => {
-                            let _ = tx.send(DeployMsg::Error(format!("Package upload failed: {}", e)));
-                            return;
-                        }
+            match patch_list {
+                Ok(r) => {
+                    let status = r.status();
+                    let body: serde_json::Value = r.json().unwrap_or_default();
+                    if status.is_success() && body["isSuccess"].as_bool().unwrap_or(false) {
+                        let _ = tx.send(DeployMsg::Log(format!("  Listing updated for {}.", locale)));
+                    } else {
+                        let _ = tx.send(DeployMsg::Log(format!("  Listing update note for {} ({}): {}", locale, status, body)));
                     }
                 }
-                Err(e) => {
-                    let _ = tx.send(DeployMsg::Error(format!("Failed to create ZIP: {}", e)));
-                    return;
-                }
-            }
-        } else {
-            let _ = tx.send(DeployMsg::Log("No package file set — submitting metadata only.".into()));
-        }
-
-        // 4. Update listings per language (using initial_listings built above)
-        let _ = tx.send(DeployMsg::Log("Updating listings...".into()));
-        submission_body["listings"] = serde_json::Value::Object(initial_listings);
-        for lang in &languages {
-            let _ = tx.send(DeployMsg::Log(format!("  Set listing for {}", microsoft_locale(lang))));
-        }
-
-        // 5. Fix required fields before PUT
-        submission_body["targetPublishMode"] = json!("Immediate");
-        submission_body["targetPublishDate"] = json!("");
-        submission_body["visibility"] = json!("Public");
-        submission_body["notesForCertification"] = json!(format!("Desktop utility for exporting data from swissdamed.ch. Requires internet access. No login required. Contact: {}", support_url));
-
-        // PUT the updated submission
-        let _ = tx.send(DeployMsg::Log("Submitting updated metadata...".into()));
-        let put_resp = client.put(format!("{}/submissions/{}", pc_base, submission_id))
-            .header("Authorization", &auth)
-            .header("Content-Type", "application/json")
-            .json(&submission_body)
-            .send();
-
-        match put_resp {
-            Ok(r) => {
-                let status = r.status();
-                if status.is_success() {
-                    let _ = tx.send(DeployMsg::Log("Submission updated successfully.".into()));
-                } else {
-                    let body: serde_json::Value = r.json().unwrap_or_default();
-                    let _ = tx.send(DeployMsg::Error(format!("Submission update failed ({}): {}", status, body)));
-                    return;
-                }
-            }
-            Err(e) => { let _ = tx.send(DeployMsg::Error(format!("Submission update failed: {}", e))); return; }
-        }
-
-        // 5. Commit the submission
-        let _ = tx.send(DeployMsg::Log("Committing submission...".into()));
-        let commit_resp = client.post(format!("{}/submissions/{}/commit", pc_base, submission_id))
-            .header("Authorization", &auth)
-            .body(Vec::<u8>::new())
-            .send();
-
-        match commit_resp {
-            Ok(r) => {
-                let status = r.status();
-                if status.is_success() {
-                    let _ = tx.send(DeployMsg::Log("Submission committed. It will be reviewed by Microsoft.".into()));
-                } else {
-                    let body: serde_json::Value = r.json().unwrap_or_default();
-                    let _ = tx.send(DeployMsg::Log(format!("Commit note: {} - {}", status, body)));
-                }
-            }
-            Err(e) => {
-                let _ = tx.send(DeployMsg::Log(format!("Commit request failed: {}", e)));
+                Err(e) => { let _ = tx.send(DeployMsg::Log(format!("  Listing PATCH failed for {}: {}", locale, e))); }
             }
         }
 
-        let _ = tx.send(DeployMsg::Log("Microsoft Store deploy complete.".into()));
+        let _ = tx.send(DeployMsg::Log("Metadata deploy complete. Binary upload is handled by the GitHub Actions release workflow.".into()));
+        let _ = tx.send(DeployMsg::Log("Phone number and company address cannot be set via the Microsoft Store API — set them once in Partner Center account settings.".into()));
         let _ = tx.send(DeployMsg::Done);
     });
 
