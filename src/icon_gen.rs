@@ -197,9 +197,17 @@ pub fn generate_icon(description: &str, app_name: &str, existing_icon_path: Opti
         let resized = image::DynamicImage::ImageRgba8(rgba);
 
         // Save into the png/ directory
-        let png_dir = std::env::current_dir().unwrap_or_default().join("png");
-        if !png_dir.exists() {
-            let _ = std::fs::create_dir_all(&png_dir);
+        let current_dir = match std::env::current_dir() {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Cannot determine working directory: {}", e)));
+                return;
+            }
+        };
+        let png_dir = current_dir.join("png");
+        if let Err(e) = std::fs::create_dir_all(&png_dir) {
+            let _ = tx.send(IconGenStatus::Error(format!("Failed to create png/ directory: {}", e)));
+            return;
         }
         let safe_name = app_name
             .chars()

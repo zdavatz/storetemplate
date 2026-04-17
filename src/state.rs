@@ -453,24 +453,35 @@ fn safe_filename(app_name: &str) -> String {
 }
 
 /// Auto-save the state to json/<app_name>.json
-pub fn auto_save(state: &AppState) {
+pub fn auto_save(state: &AppState) -> Result<(), String> {
     let name = safe_filename(&state.common.app_name);
     let path = json_dir().join(format!("{}.json", name));
     let saved = state.to_saved();
-    if let Ok(json) = serde_json::to_string_pretty(&saved) {
-        let _ = std::fs::write(&path, json);
-    }
+    let json = serde_json::to_string_pretty(&saved)
+        .map_err(|e| format!("Serialization failed: {}", e))?;
+    std::fs::write(&path, &json)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    Ok(())
 }
 
-/// Load state from a user-chosen JSON file
-pub fn load_from_file_dialog() -> Option<SavedState> {
+/// Load state from a user-chosen JSON file.
+/// Returns `Ok(None)` if the user cancelled, `Ok(Some(...))` on success,
+/// or `Err(...)` if the file could not be read or parsed.
+pub fn load_from_file_dialog() -> Result<Option<SavedState>, String> {
     let start_dir = json_dir();
-    let path = rfd::FileDialog::new()
+    let path = match rfd::FileDialog::new()
         .add_filter("JSON", &["json"])
         .set_directory(&start_dir)
-        .pick_file()?;
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
+        .pick_file()
+    {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let data = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let saved = serde_json::from_str(&data)
+        .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
+    Ok(Some(saved))
 }
 
 /// Try to load the most recently modified JSON file from the json/ dir
