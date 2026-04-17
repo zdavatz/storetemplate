@@ -926,23 +926,40 @@ pub fn deploy_github(state: &AppState) -> DeployReceiver {
         };
 
         // 1. Set secrets
+        // Secret values are passed via stdin (not --body arg) so they are never
+        // visible in the process argument list.
         let _ = tx.send(DeployMsg::Log(format!("Setting {} secrets on {}...", secrets.len(), repo)));
         for (name, value) in &secrets {
             let _ = tx.send(DeployMsg::Log(format!("  Setting secret: {}", name)));
             let mut cmd = std::process::Command::new("gh");
-            cmd.args(["secret", "set", name, "--repo", &repo, "--body", value]);
+            cmd.args(["secret", "set", name, "--repo", &repo])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
             if let Some((k, ref v)) = env_token {
                 cmd.env(k, v);
             }
-            match cmd.output() {
-                Ok(output) => {
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        let _ = tx.send(DeployMsg::Log(format!("    Warning: {}", stderr.trim())));
+            match cmd.spawn() {
+                Ok(mut child) => {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        use std::io::Write;
+                        let _ = stdin.write_all(value.as_bytes());
+                        // stdin is dropped here, closing the pipe so gh reads EOF
+                    }
+                    match child.wait_with_output() {
+                        Ok(output) => {
+                            if !output.status.success() {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                let _ = tx.send(DeployMsg::Log(format!("    Warning: {}", stderr.trim())));
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(DeployMsg::Log(format!("    Failed to wait for gh: {}", e)));
+                        }
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(DeployMsg::Log(format!("    Failed: {}", e)));
+                    let _ = tx.send(DeployMsg::Log(format!("    Failed to spawn gh: {}", e)));
                 }
             }
         }
