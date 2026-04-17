@@ -89,7 +89,7 @@ pub enum Tab {
     Deploy,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CommonState {
     pub app_name: String,
@@ -133,7 +133,7 @@ impl Default for CommonState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppleState {
     pub sku: String,
@@ -175,7 +175,7 @@ impl Default for AppleState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GooglePlayState {
     pub package_name: String,
@@ -215,7 +215,7 @@ impl Default for GooglePlayState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MicrosoftState {
     pub msstore_app_id: String,
@@ -274,7 +274,7 @@ impl Default for MicrosoftState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GithubState {
     pub tag_pattern: String,
@@ -362,7 +362,9 @@ impl AppState {
     pub fn new() -> Self {
         let mut state = Self::default();
         // Default: en and de selected
-        state.lang_selected = vec![true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+        state.lang_selected = (0..crate::languages::LANGUAGES.len())
+            .map(|i| i < 2)
+            .collect();
         state.update_active_languages();
         state
     }
@@ -402,12 +404,12 @@ impl AppState {
             store_android: self.store_android,
             store_github: self.store_github,
             lang_selected: self.lang_selected.clone(),
-            common: serde_json::from_str(&serde_json::to_string(&self.common).unwrap()).unwrap(),
-            apple: serde_json::from_str(&serde_json::to_string(&self.apple).unwrap()).unwrap(),
-            google_play: serde_json::from_str(&serde_json::to_string(&self.google_play).unwrap()).unwrap(),
-            microsoft: serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap(),
-            github: serde_json::from_str(&serde_json::to_string(&self.github).unwrap()).unwrap(),
-            deploy: serde_json::from_str(&serde_json::to_string(&self.deploy).unwrap()).unwrap(),
+            common: self.common.clone(),
+            apple: self.apple.clone(),
+            google_play: self.google_play.clone(),
+            microsoft: self.microsoft.clone(),
+            github: self.github.clone(),
+            deploy: self.deploy.clone(),
         }
     }
 

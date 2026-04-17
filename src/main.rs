@@ -404,7 +404,7 @@ fn render_deploy_tab(ui: &mut egui::Ui, state: &mut AppState) {
         ui.horizontal(|ui| {
             if ui.button("Copy Log").clicked() {
                 let text = state.deploy_log.join("\n");
-                ui.output_mut(|o| o.copied_text = text);
+                ui.ctx().copy_text(text);
             }
             if ui.button("Clear Log").clicked() {
                 state.deploy_log.clear();

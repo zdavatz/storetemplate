@@ -56,8 +56,8 @@ pub fn build_json(state: &AppState) -> Value {
         "website_url": c.website_url,
         "contact_email": c.contact_email,
         "copyright": c.copyright,
-        "pricing": common::PRICING_CHOICES[c.pricing],
-        "age_rating": common::AGE_RATING_CHOICES[c.age_rating],
+        "pricing": common::PRICING_CHOICES.get(c.pricing).copied().unwrap_or("free"),
+        "age_rating": common::AGE_RATING_CHOICES.get(c.age_rating).copied().unwrap_or("4+"),
         "app_icon_path": c.app_icon_path,
     }));
 
@@ -69,10 +69,8 @@ pub fn build_json(state: &AppState) -> Value {
             "subtitle": lang_map_to_json(&a.subtitle),
             "promotional_text": lang_map_to_json(&a.promotional_text),
             "marketing_url": a.marketing_url,
-            "primary_category": apple::MACOS_CATEGORIES[a.macos_primary_category],
-            "secondary_category": if a.macos_secondary_category < apple::MACOS_CATEGORIES.len() {
-                apple::MACOS_CATEGORIES[a.macos_secondary_category]
-            } else { "" },
+            "primary_category": apple::MACOS_CATEGORIES.get(a.macos_primary_category).copied().unwrap_or(""),
+            "secondary_category": apple::MACOS_CATEGORIES.get(a.macos_secondary_category).copied().unwrap_or(""),
             "screenshots": split_list(&a.macos_screenshots),
             "preview_video": a.macos_preview_video,
         }));
@@ -86,10 +84,8 @@ pub fn build_json(state: &AppState) -> Value {
             "subtitle": lang_map_to_json(&a.subtitle),
             "promotional_text": lang_map_to_json(&a.promotional_text),
             "marketing_url": a.marketing_url,
-            "primary_category": apple::IOS_CATEGORIES[a.ios_primary_category],
-            "secondary_category": if a.ios_secondary_category < apple::IOS_CATEGORIES.len() {
-                apple::IOS_CATEGORIES[a.ios_secondary_category]
-            } else { "" },
+            "primary_category": apple::IOS_CATEGORIES.get(a.ios_primary_category).copied().unwrap_or(""),
+            "secondary_category": apple::IOS_CATEGORIES.get(a.ios_secondary_category).copied().unwrap_or(""),
             "screenshots": {
                 "iphone_6_9": split_list(&a.ios_screenshots_iphone_6_9),
                 "iphone_6_5": split_list(&a.ios_screenshots_iphone_6_5),
@@ -104,7 +100,7 @@ pub fn build_json(state: &AppState) -> Value {
         let g = &state.google_play;
         root.insert("android".to_string(), json!({
             "package_name": g.package_name,
-            "category": google_play::CATEGORIES[g.category],
+            "category": google_play::CATEGORIES.get(g.category).copied().unwrap_or(""),
             "feature_graphic_path": g.feature_graphic_path,
             "screenshots": {
                 "phone": split_list(&g.screenshots_phone),
@@ -119,7 +115,7 @@ pub fn build_json(state: &AppState) -> Value {
                 "gambling": g.content_rating_gambling,
                 "user_generated_content": g.content_rating_user_generated,
             },
-            "release_track": google_play::RELEASE_TRACKS[g.release_track],
+            "release_track": google_play::RELEASE_TRACKS.get(g.release_track).copied().unwrap_or("production"),
             "video_url": g.video_url,
         }));
     }
@@ -129,7 +125,7 @@ pub fn build_json(state: &AppState) -> Value {
         let m = &state.microsoft;
         root.insert("windows".to_string(), json!({
             "msstore_app_id": m.msstore_app_id,
-            "category": microsoft::CATEGORIES[m.category],
+            "category": microsoft::CATEGORIES.get(m.category).copied().unwrap_or(""),
             "subcategory": m.subcategory,
             "whats_new": lang_map_to_json(&m.whats_new),
             "product_features": lang_map_list_to_json(&m.product_features),
@@ -143,12 +139,12 @@ pub fn build_json(state: &AppState) -> Value {
             },
             "screenshots": split_list(&m.screenshots),
             "installer": {
-                "type": microsoft::INSTALLER_TYPES[m.installer_type],
+                "type": microsoft::INSTALLER_TYPES.get(m.installer_type).copied().unwrap_or("msix"),
                 "silent_install": m.silent_install,
             },
             "system_requirements": {
                 "min_os": m.min_os,
-                "min_ram": microsoft::RAM_CHOICES[m.min_ram],
+                "min_ram": microsoft::RAM_CHOICES.get(m.min_ram).copied().unwrap_or(""),
                 "min_disk": m.min_disk,
             },
         }));
