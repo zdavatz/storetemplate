@@ -355,7 +355,6 @@ pub struct SavedState {
     pub google_play: GooglePlayState,
     pub microsoft: MicrosoftState,
     pub github: GithubState,
-    pub deploy: DeployState,
 }
 
 impl AppState {
@@ -409,7 +408,6 @@ impl AppState {
             google_play: self.google_play.clone(),
             microsoft: self.microsoft.clone(),
             github: self.github.clone(),
-            deploy: self.deploy.clone(),
         }
     }
 
@@ -425,7 +423,6 @@ impl AppState {
         self.google_play = saved.google_play;
         self.microsoft = saved.microsoft;
         self.github = saved.github;
-        self.deploy = saved.deploy;
         self.update_active_languages();
     }
 }
