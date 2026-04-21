@@ -89,7 +89,7 @@ pub enum Tab {
     Deploy,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CommonState {
     pub app_name: String,
@@ -133,7 +133,7 @@ impl Default for CommonState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppleState {
     pub sku: String,
@@ -175,7 +175,7 @@ impl Default for AppleState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GooglePlayState {
     pub package_name: String,
@@ -215,7 +215,7 @@ impl Default for GooglePlayState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MicrosoftState {
     pub msstore_app_id: String,
@@ -274,7 +274,7 @@ impl Default for MicrosoftState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GithubState {
     pub tag_pattern: String,
@@ -355,14 +355,15 @@ pub struct SavedState {
     pub google_play: GooglePlayState,
     pub microsoft: MicrosoftState,
     pub github: GithubState,
-    pub deploy: DeployState,
 }
 
 impl AppState {
     pub fn new() -> Self {
         let mut state = Self::default();
         // Default: en and de selected
-        state.lang_selected = vec![true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+        state.lang_selected = (0..crate::languages::LANGUAGES.len())
+            .map(|i| i < 2)
+            .collect();
         state.update_active_languages();
         state
     }
@@ -402,12 +403,11 @@ impl AppState {
             store_android: self.store_android,
             store_github: self.store_github,
             lang_selected: self.lang_selected.clone(),
-            common: serde_json::from_str(&serde_json::to_string(&self.common).unwrap()).unwrap(),
-            apple: serde_json::from_str(&serde_json::to_string(&self.apple).unwrap()).unwrap(),
-            google_play: serde_json::from_str(&serde_json::to_string(&self.google_play).unwrap()).unwrap(),
-            microsoft: serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap(),
-            github: serde_json::from_str(&serde_json::to_string(&self.github).unwrap()).unwrap(),
-            deploy: serde_json::from_str(&serde_json::to_string(&self.deploy).unwrap()).unwrap(),
+            common: self.common.clone(),
+            apple: self.apple.clone(),
+            google_play: self.google_play.clone(),
+            microsoft: self.microsoft.clone(),
+            github: self.github.clone(),
         }
     }
 
@@ -423,7 +423,6 @@ impl AppState {
         self.google_play = saved.google_play;
         self.microsoft = saved.microsoft;
         self.github = saved.github;
-        self.deploy = saved.deploy;
         self.update_active_languages();
     }
 }
@@ -451,24 +450,35 @@ fn safe_filename(app_name: &str) -> String {
 }
 
 /// Auto-save the state to json/<app_name>.json
-pub fn auto_save(state: &AppState) {
+pub fn auto_save(state: &AppState) -> Result<(), String> {
     let name = safe_filename(&state.common.app_name);
     let path = json_dir().join(format!("{}.json", name));
     let saved = state.to_saved();
-    if let Ok(json) = serde_json::to_string_pretty(&saved) {
-        let _ = std::fs::write(&path, json);
-    }
+    let json = serde_json::to_string_pretty(&saved)
+        .map_err(|e| format!("Serialization failed: {}", e))?;
+    std::fs::write(&path, &json)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    Ok(())
 }
 
-/// Load state from a user-chosen JSON file
-pub fn load_from_file_dialog() -> Option<SavedState> {
+/// Load state from a user-chosen JSON file.
+/// Returns `Ok(None)` if the user cancelled, `Ok(Some(...))` on success,
+/// or `Err(...)` if the file could not be read or parsed.
+pub fn load_from_file_dialog() -> Result<Option<SavedState>, String> {
     let start_dir = json_dir();
-    let path = rfd::FileDialog::new()
+    let path = match rfd::FileDialog::new()
         .add_filter("JSON", &["json"])
         .set_directory(&start_dir)
-        .pick_file()?;
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
+        .pick_file()
+    {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let data = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let saved = serde_json::from_str(&data)
+        .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
+    Ok(Some(saved))
 }
 
 /// Try to load the most recently modified JSON file from the json/ dir

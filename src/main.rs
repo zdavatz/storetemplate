@@ -17,6 +17,7 @@ struct StoreTemplateApp {
     icon_texture: Option<egui::TextureHandle>,
     icon_texture_path: String,
     icon_needs_reload: bool,
+    error_message: Option<String>,
 }
 
 impl StoreTemplateApp {
@@ -35,6 +36,7 @@ impl StoreTemplateApp {
             icon_texture: None,
             icon_texture_path: String::new(),
             icon_needs_reload: false,
+            error_message: None,
         }
     }
 }
@@ -45,7 +47,10 @@ impl eframe::App for StoreTemplateApp {
 
         // Auto-save every ~120 frames (~2 seconds)
         if self.frame_count % 120 == 0 {
-            state::auto_save(&self.state);
+            if let Err(e) = state::auto_save(&self.state) {
+                self.state.save_status = Some(format!("Auto-save failed: {}", e));
+                self.state.save_status_time = Some(std::time::Instant::now());
+            }
             self.state.last_saved_name = self.state.common.app_name.clone();
         }
 
@@ -103,8 +108,14 @@ impl eframe::App for StoreTemplateApp {
             || self.icon_needs_reload;
         if needs_load && !icon_path.is_empty() {
             self.icon_needs_reload = false;
-            if let Ok(img_data) = std::fs::read(icon_path) {
-                if let Ok(img) = image::load_from_memory(&img_data) {
+            let load_result = std::fs::read(icon_path)
+                .map_err(|e| format!("Failed to read icon: {}", e))
+                .and_then(|img_data| {
+                    image::load_from_memory(&img_data)
+                        .map_err(|e| format!("Failed to decode icon: {}", e))
+                });
+            match load_result {
+                Ok(img) => {
                     let rgba = img.to_rgba8();
                     let size = [rgba.width() as usize, rgba.height() as usize];
                     let pixels = rgba.into_raw();
@@ -115,6 +126,10 @@ impl eframe::App for StoreTemplateApp {
                         egui::TextureOptions::LINEAR,
                     ));
                     self.icon_texture_path = icon_path.clone();
+                }
+                Err(e) => {
+                    self.state.icon_gen_status = Some(e);
+                    self.icon_texture_path = icon_path.clone(); // avoid retrying every frame
                 }
             }
         } else if icon_path.is_empty() {
@@ -221,10 +236,17 @@ impl eframe::App for StoreTemplateApp {
                     }
                 }
                 if ui.button("Load").clicked() {
-                    if let Some(saved) = state::load_from_file_dialog() {
-                        self.state.load_from_saved(saved);
-                        self.icon_needs_reload = true;
-                        self.state.save_status = Some("Loaded successfully.".to_string());
+                    match state::load_from_file_dialog() {
+                        Ok(Some(saved)) => {
+                            self.state.load_from_saved(saved);
+                            self.icon_needs_reload = true;
+                            self.state.save_status = Some("Loaded successfully.".to_string());
+                            self.state.save_status_time = Some(std::time::Instant::now());
+                        }
+                        Ok(None) => {} // user cancelled
+                        Err(e) => {
+                            self.error_message = Some(e);
+                        }
                     }
                 }
                 if ui.button("Clear").clicked() {
@@ -238,6 +260,26 @@ impl eframe::App for StoreTemplateApp {
             });
             ui.add_space(4.0);
         });
+
+        // Error dialog
+        if let Some(ref msg) = self.error_message.clone() {
+            let mut open = true;
+            egui::Window::new("Error")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label(msg);
+                    ui.add_space(8.0);
+                    if ui.button("OK").clicked() {
+                        self.error_message = None;
+                    }
+                });
+            if !open {
+                self.error_message = None;
+            }
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -288,7 +330,7 @@ impl eframe::App for StoreTemplateApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        state::auto_save(&self.state);
+        let _ = state::auto_save(&self.state);
     }
 }
 
@@ -404,7 +446,7 @@ fn render_deploy_tab(ui: &mut egui::Ui, state: &mut AppState) {
         ui.horizontal(|ui| {
             if ui.button("Copy Log").clicked() {
                 let text = state.deploy_log.join("\n");
-                ui.output_mut(|o| o.copied_text = text);
+                ui.ctx().copy_text(text);
             }
             if ui.button("Clear Log").clicked() {
                 state.deploy_log.clear();
