@@ -340,6 +340,66 @@ impl Default for DeployState {
     }
 }
 
+// --- Field resolution helpers ---
+//
+// Several per-store fields default to a value from Common when left empty,
+// so the user only has to fill the information once. These helpers return the
+// effective value used for JSON output and store-API deploys.
+
+fn lang_map_is_empty(m: &HashMap<String, String>) -> bool {
+    m.values().all(|v| v.trim().is_empty())
+}
+
+/// Apple marketing URL is always Common.website_url (no per-store override).
+pub fn resolved_apple_marketing_url(c: &CommonState) -> String {
+    c.website_url.clone()
+}
+
+/// Microsoft search terms are always Common.keywords (no per-store override).
+pub fn resolved_microsoft_search_terms(c: &CommonState) -> HashMap<String, String> {
+    c.keywords.clone()
+}
+
+/// Apple subtitle defaults to Common.short_description (truncated to 30 chars
+/// per the App Store limit) when no per-store override is set.
+pub fn resolved_apple_subtitle(c: &CommonState, a: &AppleState) -> HashMap<String, String> {
+    if !lang_map_is_empty(&a.subtitle) {
+        a.subtitle.clone()
+    } else {
+        c.short_description
+            .iter()
+            .map(|(k, v)| (k.clone(), v.chars().take(30).collect::<String>()))
+            .collect()
+    }
+}
+
+/// Apple promotional text defaults to Common.short_description when empty.
+pub fn resolved_apple_promotional_text(c: &CommonState, a: &AppleState) -> HashMap<String, String> {
+    if !lang_map_is_empty(&a.promotional_text) {
+        a.promotional_text.clone()
+    } else {
+        c.short_description.clone()
+    }
+}
+
+/// Microsoft "what's new" defaults to Common.full_description when empty.
+pub fn resolved_microsoft_whats_new(c: &CommonState, m: &MicrosoftState) -> HashMap<String, String> {
+    if !lang_map_is_empty(&m.whats_new) {
+        m.whats_new.clone()
+    } else {
+        c.full_description.clone()
+    }
+}
+
+/// Microsoft product features default to Common.short_description when empty.
+pub fn resolved_microsoft_product_features(c: &CommonState, m: &MicrosoftState) -> HashMap<String, String> {
+    if !lang_map_is_empty(&m.product_features) {
+        m.product_features.clone()
+    } else {
+        c.short_description.clone()
+    }
+}
+
 /// Serializable snapshot of the full app state (excludes transient UI fields).
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -395,6 +455,16 @@ impl AppState {
     }
 
     pub fn to_saved(&self) -> SavedState {
+        let mut apple: AppleState = serde_json::from_str(&serde_json::to_string(&self.apple).unwrap()).unwrap();
+        apple.marketing_url = resolved_apple_marketing_url(&self.common);
+        apple.subtitle = resolved_apple_subtitle(&self.common, &self.apple);
+        apple.promotional_text = resolved_apple_promotional_text(&self.common, &self.apple);
+
+        let mut microsoft: MicrosoftState = serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap();
+        microsoft.search_terms = resolved_microsoft_search_terms(&self.common);
+        microsoft.whats_new = resolved_microsoft_whats_new(&self.common, &self.microsoft);
+        microsoft.product_features = resolved_microsoft_product_features(&self.common, &self.microsoft);
+
         SavedState {
             store_macos: self.store_macos,
             store_ios: self.store_ios,
@@ -403,9 +473,9 @@ impl AppState {
             store_github: self.store_github,
             lang_selected: self.lang_selected.clone(),
             common: serde_json::from_str(&serde_json::to_string(&self.common).unwrap()).unwrap(),
-            apple: serde_json::from_str(&serde_json::to_string(&self.apple).unwrap()).unwrap(),
+            apple,
             google_play: serde_json::from_str(&serde_json::to_string(&self.google_play).unwrap()).unwrap(),
-            microsoft: serde_json::from_str(&serde_json::to_string(&self.microsoft).unwrap()).unwrap(),
+            microsoft,
             github: serde_json::from_str(&serde_json::to_string(&self.github).unwrap()).unwrap(),
             deploy: serde_json::from_str(&serde_json::to_string(&self.deploy).unwrap()).unwrap(),
         }

@@ -182,11 +182,11 @@ pub fn deploy_apple(state: &AppState) -> DeployReceiver {
     let copyright = state.common.copyright.clone();
     let privacy_url = state.common.privacy_policy_url.clone();
     let support_url = state.common.support_url.clone();
-    let marketing_url = state.apple.marketing_url.clone();
+    let marketing_url = crate::state::resolved_apple_marketing_url(&state.common);
     let _short_desc = state.common.short_description.clone();
     let full_desc = state.common.full_description.clone();
     let keywords = state.common.keywords.clone();
-    let subtitle = state.apple.subtitle.clone();
+    let subtitle = crate::state::resolved_apple_subtitle(&state.common, &state.apple);
     let languages = state.active_languages.clone();
 
     thread::spawn(move || {
@@ -673,9 +673,9 @@ pub fn deploy_microsoft(state: &AppState) -> DeployReceiver {
     let copyright = state.common.copyright.clone();
     let website_url = state.common.website_url.clone();
     let contact_email = state.common.contact_email.clone();
-    let whats_new = state.microsoft.whats_new.clone();
-    let product_features = state.microsoft.product_features.clone();
-    let search_terms = state.microsoft.search_terms.clone();
+    let whats_new = crate::state::resolved_microsoft_whats_new(&state.common, &state.microsoft);
+    let product_features = crate::state::resolved_microsoft_product_features(&state.common, &state.microsoft);
+    let search_terms = crate::state::resolved_microsoft_search_terms(&state.common);
     let certification_notes = state.microsoft.certification_notes.clone();
     let additional_license_terms = state.microsoft.additional_license_terms.clone();
     let languages = state.active_languages.clone();

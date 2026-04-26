@@ -6,11 +6,60 @@ use serde_json::json;
 
 pub enum IconGenStatus {
     Generating,
-    Done(String),  // file path
+    Done(String),  // file path — replaces current icon
+    DoneExtra(String),  // file path — saved alongside, does not replace current icon
     Error(String),
 }
 
 pub type IconReceiver = mpsc::Receiver<IconGenStatus>;
+
+/// Spawn a background thread to upscale an existing icon to 4096x4096 (4K).
+/// Preserves transparency. Saves to `png/{app_name}_icon_4k_{timestamp}.png`.
+pub fn upscale_to_4k(icon_path: &str, app_name: &str) -> IconReceiver {
+    let (tx, rx) = mpsc::channel();
+    let icon_path = icon_path.to_string();
+    let app_name = app_name.to_string();
+
+    thread::spawn(move || {
+        let _ = tx.send(IconGenStatus::Generating);
+
+        let img = match image::open(&icon_path) {
+            Ok(img) => img,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Open error: {}", e)));
+                return;
+            }
+        };
+
+        let upscaled = img.resize_exact(4096, 4096, image::imageops::FilterType::Lanczos3);
+
+        let png_dir = std::env::current_dir().unwrap_or_default().join("png");
+        if !png_dir.exists() {
+            let _ = std::fs::create_dir_all(&png_dir);
+        }
+        let safe_name = app_name
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect::<String>();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let filename = format!("{}_icon_4k_{}.png", safe_name, timestamp);
+        let save_path = png_dir.join(&filename);
+
+        match upscaled.save(&save_path) {
+            Ok(_) => {
+                let _ = tx.send(IconGenStatus::DoneExtra(save_path.display().to_string()));
+            }
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Save error: {}", e)));
+            }
+        }
+    });
+
+    rx
+}
 
 /// Spawn a background thread to generate an app icon via the xAI Grok API.
 /// If `existing_icon_path` is provided, sends it to the edit endpoint for iteration.

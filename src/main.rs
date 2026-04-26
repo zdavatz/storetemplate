@@ -62,6 +62,10 @@ impl eframe::App for StoreTemplateApp {
                         self.state.icon_gen_receiver = None;
                         self.icon_needs_reload = true;
                     }
+                    icon_gen::IconGenStatus::DoneExtra(path) => {
+                        self.state.icon_gen_status = Some(format!("Icon saved: {}", path));
+                        self.state.icon_gen_receiver = None;
+                    }
                     icon_gen::IconGenStatus::Error(e) => {
                         self.state.icon_gen_status = Some(format!("Error: {}", e));
                         self.state.icon_gen_receiver = None;

@@ -27,9 +27,9 @@ Form state is auto-saved to the `json/` directory and restored on next launch.
 Each template includes the maximum metadata supported by each store's API:
 
 - **Common** (filled once, shared by all stores): app name, bundle/package ID (auto-suggested), descriptions (multi-language), keywords, URLs, contact, pricing, age rating, AI icon generation
-- **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type
+- **Apple**: SKU (auto-suggested, with link to App Store Connect), subtitle, promotional text, categories, screenshots per device type. Marketing URL is taken from `common.website_url`. Subtitle and promotional text auto-fill from `common.short_description` when left empty (subtitle is truncated to Apple's 30-char limit).
 - **Google Play**: package name (with link to Google Play Console), category, feature graphic, IARC content rating, release track
-- **Microsoft Store**: Product ID (with link to Partner Center), category/subcategory, "What's new", product features, search terms, store logos, installer config, system requirements (Privacy URL, Support URL, Website deploy via the v2 API; phone/address must be set manually in Partner Center account settings)
+- **Microsoft Store**: Product ID (with link to Partner Center), category/subcategory, "What's new", product features, store logos, installer config, system requirements (Privacy URL, Support URL, Website deploy via the v2 API; phone/address must be set manually in Partner Center account settings). Search terms are taken from `common.keywords`. "What's new" auto-fills from `common.full_description` and product features auto-fill from `common.short_description` when left empty.
 - **GitHub**: tag pattern, release notes template, draft/prerelease flags, build AppImage option, asset patterns
 
 ## Building
@@ -160,6 +160,7 @@ export XAI_API_KEY="your-key-here"
 Features:
 - **Generate New Icon** — creates a fresh icon from your description
 - **Iterate on Icon** — sends the current icon + description to refine the design
+- **Generate 4K Version** — opens a file picker for any PNG and upscales it to 4096x4096 (Lanczos3) into `png/`
 - Background is automatically made transparent via post-processing
 - All generated icons are saved in the `png/` directory with timestamps
 - Icon preview displayed inline in the GUI

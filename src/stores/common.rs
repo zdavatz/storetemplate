@@ -104,6 +104,23 @@ pub fn ui_section(
             }
         });
 
+        ui.add_enabled_ui(!is_generating, |ui| {
+            if ui.button("Generate 4K Version…").clicked() {
+                let mut dialog = rfd::FileDialog::new()
+                    .add_filter("PNG image", &["png"]);
+                if has_icon {
+                    if let Some(parent) = std::path::Path::new(&state.app_icon_path).parent() {
+                        dialog = dialog.set_directory(parent);
+                    }
+                }
+                if let Some(path) = dialog.pick_file() {
+                    let path_str = path.display().to_string();
+                    *icon_gen_receiver = Some(icon_gen::upscale_to_4k(&path_str, &name));
+                    *icon_gen_status = Some("Upscaling to 4K...".to_string());
+                }
+            }
+        });
+
         if is_generating {
             ui.spinner();
             ui.label("Generating...");

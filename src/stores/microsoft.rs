@@ -38,10 +38,12 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut MicrosoftState, languages: &[St
     ui.add_space(4.0);
 
     widgets::per_language_multiline(ui, "ms_whats_new", "What's new", &mut state.whats_new, languages, Some(1500), false);
+    ui.weak("Auto-filled from Common.full_description if left empty.");
     ui.add_space(4.0);
     widgets::per_language_list(ui, "ms_features", "Product features (up to 20)", &mut state.product_features, languages, Some(20));
+    ui.weak("Auto-filled from Common.short_description if left empty.");
     ui.add_space(4.0);
-    widgets::per_language_list(ui, "ms_search", "Search terms (up to 7)", &mut state.search_terms, languages, Some(7));
+    ui.weak("Search terms are taken from Common.keywords.");
 
     ui.add_space(12.0);
     ui.separator();

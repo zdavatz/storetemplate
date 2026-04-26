@@ -57,10 +57,12 @@ pub fn ui_section(ui: &mut egui::Ui, state: &mut AppleState, languages: &[String
         }
     });
     widgets::per_language_text(ui, "apple_subtitle", "Subtitle", &mut state.subtitle, languages, Some(30), false);
+    ui.weak("Auto-filled from Common.short_description (truncated to 30 chars) if left empty.");
     ui.add_space(4.0);
     widgets::per_language_text(ui, "apple_promo", "Promotional text", &mut state.promotional_text, languages, Some(170), false);
+    ui.weak("Auto-filled from Common.short_description if left empty.");
     ui.add_space(4.0);
-    widgets::url_field(ui, "Marketing URL", &mut state.marketing_url, false);
+    ui.weak("Marketing URL is taken from Common.website_url.");
 
     if has_macos {
         ui.add_space(12.0);

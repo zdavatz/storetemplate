@@ -64,11 +64,14 @@ pub fn build_json(state: &AppState) -> Value {
     // Apple - macOS
     if state.store_macos {
         let a = &state.apple;
+        let subtitle = crate::state::resolved_apple_subtitle(&state.common, a);
+        let promo = crate::state::resolved_apple_promotional_text(&state.common, a);
+        let marketing_url = crate::state::resolved_apple_marketing_url(&state.common);
         root.insert("macos".to_string(), json!({
             "sku": a.sku,
-            "subtitle": lang_map_to_json(&a.subtitle),
-            "promotional_text": lang_map_to_json(&a.promotional_text),
-            "marketing_url": a.marketing_url,
+            "subtitle": lang_map_to_json(&subtitle),
+            "promotional_text": lang_map_to_json(&promo),
+            "marketing_url": marketing_url,
             "primary_category": apple::MACOS_CATEGORIES[a.macos_primary_category],
             "secondary_category": if a.macos_secondary_category < apple::MACOS_CATEGORIES.len() {
                 apple::MACOS_CATEGORIES[a.macos_secondary_category]
@@ -81,11 +84,14 @@ pub fn build_json(state: &AppState) -> Value {
     // Apple - iOS
     if state.store_ios {
         let a = &state.apple;
+        let subtitle = crate::state::resolved_apple_subtitle(&state.common, a);
+        let promo = crate::state::resolved_apple_promotional_text(&state.common, a);
+        let marketing_url = crate::state::resolved_apple_marketing_url(&state.common);
         root.insert("ios".to_string(), json!({
             "sku": a.sku,
-            "subtitle": lang_map_to_json(&a.subtitle),
-            "promotional_text": lang_map_to_json(&a.promotional_text),
-            "marketing_url": a.marketing_url,
+            "subtitle": lang_map_to_json(&subtitle),
+            "promotional_text": lang_map_to_json(&promo),
+            "marketing_url": marketing_url,
             "primary_category": apple::IOS_CATEGORIES[a.ios_primary_category],
             "secondary_category": if a.ios_secondary_category < apple::IOS_CATEGORIES.len() {
                 apple::IOS_CATEGORIES[a.ios_secondary_category]
@@ -127,13 +133,16 @@ pub fn build_json(state: &AppState) -> Value {
     // Microsoft Store
     if state.store_windows {
         let m = &state.microsoft;
+        let whats_new = crate::state::resolved_microsoft_whats_new(&state.common, m);
+        let product_features = crate::state::resolved_microsoft_product_features(&state.common, m);
+        let search_terms = crate::state::resolved_microsoft_search_terms(&state.common);
         root.insert("windows".to_string(), json!({
             "msstore_app_id": m.msstore_app_id,
             "category": microsoft::CATEGORIES[m.category],
             "subcategory": m.subcategory,
-            "whats_new": lang_map_to_json(&m.whats_new),
-            "product_features": lang_map_list_to_json(&m.product_features),
-            "search_terms": lang_map_list_to_json(&m.search_terms),
+            "whats_new": lang_map_to_json(&whats_new),
+            "product_features": lang_map_list_to_json(&product_features),
+            "search_terms": lang_map_list_to_json(&search_terms),
             "certification_notes": m.certification_notes,
             "additional_license_terms": m.additional_license_terms,
             "store_logos": {

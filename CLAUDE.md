@@ -17,17 +17,17 @@ cargo run            # build and launch GUI
 ## Architecture
 
 - `src/main.rs` — eframe entry point, `StoreTemplateApp` struct, top-level render loop with header (store/language checkboxes), tab bar, central scroll area, and footer (save/load/clear buttons). Handles icon texture loading, auto-save polling, and app icon for taskbar
-- `src/icon_gen.rs` — AI icon generation via xAI Grok API (`grok-imagine-image` model). Supports new generation and iteration on existing icons via `/images/generations` and `/images/edits` endpoints. Post-processes images to make background transparent. Saves icons to `png/` directory
-- `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`. `SavedState` for JSON serialization. Auto-save/load functions for `json/` directory
+- `src/icon_gen.rs` — AI icon generation via xAI Grok API (`grok-imagine-image` model). Supports new generation and iteration on existing icons via `/images/generations` and `/images/edits` endpoints. Post-processes images to make background transparent. Saves icons to `png/` directory. Also exposes `upscale_to_4k()` — pure local Lanczos3 resize (no API call) that takes any PNG path and writes a 4096x4096 version to `png/`. Status enum has a `DoneExtra` variant for results that should NOT replace the current `app_icon_path` (used by 4K upscale).
+- `src/state.rs` — all form state: `AppState` (top-level), `CommonState`, `AppleState`, `GooglePlayState`, `MicrosoftState`, `GithubState`. Per-language fields use `HashMap<String, String>`. `SavedState` for JSON serialization. Auto-save/load functions for `json/` directory. Also defines `resolved_*` helpers that derive per-store fields from Common (so each piece of info is entered once); `to_saved()` and `build_json()` apply these so the JSON output always carries fully populated values regardless of what the user typed in per-store widgets.
 - `src/widgets.rs` — reusable form widget helpers: `text_field`, `multiline_field`, `choice_field`, `bool_field`, `list_field`, `path_field`, `dir_field`, `url_field`, `email_field`, `per_language_text`, `per_language_multiline`, `per_language_list`
 - `src/languages.rs` — `LANGUAGES` constant (20 ISO codes with display names)
 - `src/json_output.rs` — `build_json()` assembles JSON from state, `validate()` checks required fields, `save_to_file()` opens native save dialog and also generates `.github/workflows/release.yml`
 - `src/workflow.rs` — `build_workflow()` generates GitHub Actions release workflow YAML based on selected stores (build jobs for macOS/iOS/Windows/Android/AppImage + create-release job)
 - `src/stores/mod.rs` — module registry
 - `src/stores/common.rs` — shared fields UI (app name, descriptions, URLs, pricing, age rating, icon description field, generate/iterate icon buttons, icon preview). Bundle/Package ID auto-suggested from app name as `com.example.appname`
-- `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS)
+- `src/stores/apple.rs` — Apple-specific UI (SKU with auto-suggest and App Store Connect link, subtitle, categories, screenshots per device type for macOS/iOS). The Marketing URL widget is intentionally absent — it's always derived from `common.website_url`. Subtitle and promotional text show a hint that they auto-fill from `common.short_description` when empty.
 - `src/stores/google_play.rs` — Android-specific UI (package name with Google Play Console link, category, IARC content rating, assets)
-- `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, support info/phone/address for Properties page, "what's new", product features, search terms, logos, installer config)
+- `src/stores/microsoft.rs` — Windows Store UI (App ID with Partner Center link, category, support info/phone/address for Properties page, "what's new", product features, logos, installer config). The Search Terms widget is intentionally absent — it's always derived from `common.keywords`. "What's new" and product features show a hint that they auto-fill from Common fields when empty.
 - `src/stores/github.rs` — GitHub Releases UI (tag pattern, branch, draft/prerelease, build AppImage option, asset patterns)
 - `src/deploy.rs` — Store API integration for one-click deployment:
   - `autofill_credentials()` — reads `~/.apple/credentials.json` + `~/.config/gh/hosts.yml` to populate all credential fields
@@ -65,6 +65,7 @@ The `-legacy` flag is required for macOS `security import` compatibility.
 ## Key Design Decisions
 
 - Common tab holds all shared fields (name, descriptions, keywords, URLs) — store tabs only have store-unique fields to avoid duplicate entry
+- "Fill once" rule: `apple.marketing_url` and `microsoft.search_terms` widgets are removed entirely (always derived from `common.website_url` / `common.keywords`). `apple.subtitle`, `apple.promotional_text`, `microsoft.whats_new`, `microsoft.product_features` keep their widgets but auto-fill from the matching Common field when left empty. JSON output (both auto-save and the manual Save dialog) always emits the resolved value, so saved JSON keeps the same field set as before — downstream consumers see no shape change.
 - Per-language fields render side-by-side language groups using `HashMap<String, String>` keyed by ISO code
 - egui immediate mode: conditional rendering based on which stores are checked — no dynamic widget tree needed
 - Validation runs on save, not per-keystroke; character counts shown inline with red/gray coloring
