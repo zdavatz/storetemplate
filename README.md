@@ -160,10 +160,26 @@ export XAI_API_KEY="your-key-here"
 Features:
 - **Generate New Icon** — creates a fresh icon from your description
 - **Iterate on Icon** — sends the current icon + description to refine the design
-- **Generate 4K Version** — opens a file picker for any PNG and upscales it to 4096x4096 (Lanczos3) into `png/`
-- Background is automatically made transparent via post-processing
+- **Generate from STL** — fetches an STL file (local path or URL — `github.com/.../blob/...` URLs are auto-rewritten to `raw.githubusercontent.com`), renders it locally, and sends the render to Grok for stylization
+- **Generate 4K Version** — directly upscales the current icon to 4096×4096 (Lanczos3); no file dialog
+- **Upscale other PNG…** — file dialog (defaulted to `png/`) for upscaling any other PNG
+- Background is automatically made transparent and the design is auto-cropped to the opaque bounding box so it fills the icon edge-to-edge
 - All generated icons are saved in the `png/` directory with timestamps
 - Icon preview displayed inline in the GUI
+
+### STL Preview & Camera Controls
+
+After clicking **Load STL preview**:
+
+- A 256×256 interactive canvas appears below — **drag horizontally for azimuth, vertically for elevation** (~0.6°/px)
+- Numeric `DragValue` inputs let you set azimuth/elevation precisely (azimuth: −360..360°, elevation: −90..90°)
+- **Z is up** toggle (default ON) pre-rotates the model so its Z axis becomes screen-up — matches the convention of most CAD / 3D-printing STLs. Turn off for Y-up STLs (e.g. game-engine exports)
+- **View presets**: Iso · Top · Bottom · Front · Back · Left · Right — instant access regardless of model orientation
+- The mesh is parsed once with `stl_io` and cached in memory, so drag re-renders are fast even for high-poly models. **Generate from STL** uses whatever angle you settled on
+
+## Translation (DE ↔ EN)
+
+The Common tab includes two buttons — **DE → EN** and **EN → DE** — that translate the per-language `short_description`, `full_description`, and `keywords` fields in a single Grok call (`grok-3-mini-fast`, ~2s). Empty source fields are skipped. Comma-separated keyword lists stay comma-separated. Uses the same `XAI_API_KEY` as icon generation.
 
 ## Dependencies
 
@@ -176,6 +192,7 @@ Features:
 - `image` — image processing and background removal
 - `base64` — base64 encoding/decoding
 - `jsonwebtoken` — ES256 JWT signing for Apple App Store Connect API
+- `stl_io` — STL parser used by the STL → icon renderer
 
 ## License
 

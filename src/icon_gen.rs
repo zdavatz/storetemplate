@@ -212,64 +212,256 @@ pub fn generate_icon(description: &str, app_name: &str, existing_icon_path: Opti
             return;
         };
 
-        // Resize to 512x512 and make background transparent
-        let img = match image::load_from_memory(&image_data) {
-            Ok(img) => img,
-            Err(e) => {
-                let _ = tx.send(IconGenStatus::Error(format!("Image decode error: {}", e)));
-                return;
-            }
-        };
-
-        let resized = img.resize_exact(512, 512, image::imageops::FilterType::Lanczos3);
-        let mut rgba = resized.to_rgba8();
-
-        // Detect background color from corner pixels
-        let bg_color = rgba.get_pixel(0, 0).0;
-        let threshold = 60u32;
-
-        for pixel in rgba.pixels_mut() {
-            let dr = (pixel[0] as i32 - bg_color[0] as i32).unsigned_abs();
-            let dg = (pixel[1] as i32 - bg_color[1] as i32).unsigned_abs();
-            let db = (pixel[2] as i32 - bg_color[2] as i32).unsigned_abs();
-            let diff = dr + dg + db;
-            if diff < threshold {
-                // Fully transparent
-                pixel[3] = 0;
-            } else if diff < threshold * 2 {
-                // Feather the edges for smooth anti-aliasing
-                let alpha = ((diff - threshold) * 255 / threshold).min(255) as u8;
-                pixel[3] = alpha;
-            }
-        }
-
-        let resized = image::DynamicImage::ImageRgba8(rgba);
-
-        // Save into the png/ directory
-        let png_dir = std::env::current_dir().unwrap_or_default().join("png");
-        if !png_dir.exists() {
-            let _ = std::fs::create_dir_all(&png_dir);
-        }
-        let safe_name = app_name
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { '_' })
-            .collect::<String>();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let filename = format!("{}_icon_{}.png", safe_name, timestamp);
-        let save_path = png_dir.join(&filename);
-
-        match resized.save(&save_path) {
-            Ok(_) => {
-                let _ = tx.send(IconGenStatus::Done(save_path.display().to_string()));
+        match finalize_and_save_icon(&image_data, &app_name) {
+            Ok(path) => {
+                let _ = tx.send(IconGenStatus::Done(path));
             }
             Err(e) => {
-                let _ = tx.send(IconGenStatus::Error(format!("Save error: {}", e)));
+                let _ = tx.send(IconGenStatus::Error(e));
             }
         }
     });
 
     rx
 }
+
+/// Post-process an image (transparency, crop to opaque bbox, resize to 512²) and
+/// save into `png/<safe_name>_icon_<timestamp>.png`. Returns the saved path.
+fn finalize_and_save_icon(image_data: &[u8], app_name: &str) -> Result<String, String> {
+    let img = image::load_from_memory(image_data)
+        .map_err(|e| format!("Image decode error: {}", e))?;
+
+    // Process at the source resolution so the crop step has maximum data to work with.
+    let mut rgba = img.to_rgba8();
+
+    // Background-keying: pixels close to the corner color become transparent.
+    let bg_color = rgba.get_pixel(0, 0).0;
+    let threshold = 60u32;
+
+    for pixel in rgba.pixels_mut() {
+        let dr = (pixel[0] as i32 - bg_color[0] as i32).unsigned_abs();
+        let dg = (pixel[1] as i32 - bg_color[1] as i32).unsigned_abs();
+        let db = (pixel[2] as i32 - bg_color[2] as i32).unsigned_abs();
+        let diff = dr + dg + db;
+        if diff < threshold {
+            pixel[3] = 0;
+        } else if diff < threshold * 2 {
+            let alpha = ((diff - threshold) * 255 / threshold).min(255) as u8;
+            pixel[3] = alpha;
+        }
+    }
+
+    // Crop to the bounding box of opaque pixels so the design fills the icon edge-to-edge.
+    let alpha_threshold = 16u8;
+    let (img_w, img_h) = (rgba.width(), rgba.height());
+    let mut min_x = img_w;
+    let mut min_y = img_h;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    for y in 0..img_h {
+        for x in 0..img_w {
+            if rgba.get_pixel(x, y)[3] > alpha_threshold {
+                if x < min_x { min_x = x; }
+                if y < min_y { min_y = y; }
+                if x > max_x { max_x = x; }
+                if y > max_y { max_y = y; }
+            }
+        }
+    }
+
+    let cropped = if min_x <= max_x && min_y <= max_y {
+        let w = max_x - min_x + 1;
+        let h = max_y - min_y + 1;
+        let side = w.max(h);
+        let cx = (min_x + max_x) / 2;
+        let cy = (min_y + max_y) / 2;
+        let half = side / 2;
+        let sx = cx.saturating_sub(half);
+        let sy = cy.saturating_sub(half);
+        let actual_side = side.min(img_w.saturating_sub(sx)).min(img_h.saturating_sub(sy));
+        image::DynamicImage::ImageRgba8(rgba.clone())
+            .crop_imm(sx, sy, actual_side, actual_side)
+    } else {
+        image::DynamicImage::ImageRgba8(rgba)
+    };
+
+    let resized = cropped.resize_exact(512, 512, image::imageops::FilterType::Lanczos3);
+
+    let png_dir = std::env::current_dir().unwrap_or_default().join("png");
+    if !png_dir.exists() {
+        let _ = std::fs::create_dir_all(&png_dir);
+    }
+    let safe_name = app_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let filename = format!("{}_icon_{}.png", safe_name, timestamp);
+    let save_path = png_dir.join(&filename);
+
+    resized.save(&save_path).map_err(|e| format!("Save error: {}", e))?;
+    Ok(save_path.display().to_string())
+}
+
+
+/// Spawn a background thread that fetches an STL (path or URL), renders it to a PNG,
+/// and sends that PNG to the Grok edit endpoint with an STL-specific prompt to
+/// stylize the 3D shape into a polished app icon.
+pub fn generate_icon_from_stl(
+    description: &str,
+    app_name: &str,
+    stl_input: &str,
+    azimuth_deg: f32,
+    elevation_deg: f32,
+    z_up: bool,
+) -> IconReceiver {
+    let (tx, rx) = mpsc::channel();
+    let description = description.to_string();
+    let app_name = app_name.to_string();
+    let stl_input = stl_input.to_string();
+
+    thread::spawn(move || {
+        let _ = tx.send(IconGenStatus::Generating);
+
+        let api_key = match std::env::var("XAI_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                let _ = tx.send(IconGenStatus::Error(
+                    "XAI_API_KEY not set. Add it to your .zshrc and restart.".to_string(),
+                ));
+                return;
+            }
+        };
+
+        let stl_path = match crate::stl_render::fetch_stl(&stl_input) {
+            Ok(p) => p,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("STL fetch: {}", e)));
+                return;
+            }
+        };
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let render_path = std::env::temp_dir()
+            .join(format!("storetemplate_render_{}.png", timestamp));
+        if let Err(e) = crate::stl_render::render_stl_to_png(
+            &stl_path,
+            &render_path,
+            1024,
+            azimuth_deg,
+            elevation_deg,
+            z_up,
+        ) {
+            let _ = tx.send(IconGenStatus::Error(format!("STL render: {}", e)));
+            return;
+        }
+
+        let render_data = match std::fs::read(&render_path) {
+            Ok(d) => d,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Read render: {}", e)));
+                return;
+            }
+        };
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&render_data);
+        let data_uri = format!("data:image/png;base64,{}", b64);
+
+        let prompt = format!(
+            "Transform this 3D model render into a professional app icon for an application \
+             called \"{}\". {}. Stylize the 3D shape into a clean, modern, flat-design icon \
+             while keeping the silhouette and key features of the model recognizable. \
+             Requirements: square icon, no text, vibrant harmonious colors, single recognizable \
+             symbol. ZERO whitespace — the artwork must bleed off all four edges of the canvas. \
+             Use a solid WHITE background. Suitable for iOS, macOS, Windows, and Android app stores.",
+            app_name, description
+        );
+
+        let body = json!({
+            "model": "grok-imagine-image",
+            "prompt": prompt,
+            "n": 1,
+            "image": {
+                "url": data_uri,
+                "type": "image_url"
+            },
+            "response_format": "b64_json"
+        });
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(180))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+
+        let response = client
+            .post("https://api.x.ai/v1/images/edits")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send();
+
+        let response = match response {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Request failed: {}", e)));
+                return;
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().unwrap_or_default();
+            let _ = tx.send(IconGenStatus::Error(format!("API error ({}): {}", status, body)));
+            return;
+        }
+
+        let body: serde_json::Value = match response.json() {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(format!("Parse error: {}", e)));
+                return;
+            }
+        };
+
+        let image_data = if let Some(b64) = body["data"][0]["b64_json"].as_str() {
+            match base64::engine::general_purpose::STANDARD.decode(b64) {
+                Ok(d) => d,
+                Err(e) => {
+                    let _ = tx.send(IconGenStatus::Error(format!("Base64 decode: {}", e)));
+                    return;
+                }
+            }
+        } else if let Some(url) = body["data"][0]["url"].as_str() {
+            match client.get(url).send().and_then(|r| r.bytes()) {
+                Ok(bytes) => bytes.to_vec(),
+                Err(e) => {
+                    let _ = tx.send(IconGenStatus::Error(format!("Download: {}", e)));
+                    return;
+                }
+            }
+        } else {
+            let _ = tx.send(IconGenStatus::Error(format!(
+                "Unexpected API response: {}",
+                serde_json::to_string_pretty(&body).unwrap_or_default()
+            )));
+            return;
+        };
+
+        match finalize_and_save_icon(&image_data, &app_name) {
+            Ok(path) => {
+                let _ = tx.send(IconGenStatus::Done(path));
+            }
+            Err(e) => {
+                let _ = tx.send(IconGenStatus::Error(e));
+            }
+        }
+    });
+
+    rx
+}
+

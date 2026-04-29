@@ -2,6 +2,8 @@ mod deploy;
 mod icon_gen;
 mod languages;
 mod state;
+mod stl_render;
+mod translate;
 mod widgets;
 mod stores;
 mod json_output;
@@ -17,6 +19,8 @@ struct StoreTemplateApp {
     icon_texture: Option<egui::TextureHandle>,
     icon_texture_path: String,
     icon_needs_reload: bool,
+    stl_preview_texture: Option<egui::TextureHandle>,
+    stl_last_rendered_angles: (f32, f32, bool),
 }
 
 impl StoreTemplateApp {
@@ -35,6 +39,8 @@ impl StoreTemplateApp {
             icon_texture: None,
             icon_texture_path: String::new(),
             icon_needs_reload: false,
+            stl_preview_texture: None,
+            stl_last_rendered_angles: (f32::NAN, f32::NAN, false),
         }
     }
 }
@@ -73,6 +79,83 @@ impl eframe::App for StoreTemplateApp {
                 }
                 ctx.request_repaint();
             }
+        }
+
+        // Poll translation result
+        if let Some(ref rx) = self.state.translate_receiver {
+            if let Ok(status) = rx.try_recv() {
+                match status {
+                    translate::TranslateStatus::Translating => {
+                        self.state.translate_status = Some("Translating...".to_string());
+                    }
+                    translate::TranslateStatus::Done(to_lang, translated) => {
+                        let count = translated.len();
+                        stores::common::apply_translation(
+                            &mut self.state.common,
+                            &to_lang,
+                            &translated,
+                        );
+                        self.state.translate_status = Some(format!(
+                            "Translated {} field(s) -> {}",
+                            count, to_lang
+                        ));
+                        self.state.translate_receiver = None;
+                    }
+                    translate::TranslateStatus::Error(e) => {
+                        self.state.translate_status = Some(format!("Error: {}", e));
+                        self.state.translate_receiver = None;
+                    }
+                }
+                ctx.request_repaint();
+            }
+        }
+
+        // Poll STL mesh-loading channel
+        let mut mesh_done = false;
+        if let Some(rx) = &self.state.stl_mesh_loading {
+            if let Ok(result) = rx.try_recv() {
+                match result {
+                    Ok(mesh) => {
+                        self.state.stl_mesh = Some(mesh);
+                        self.state.stl_mesh_source = self.state.common.icon_stl_path.clone();
+                        self.stl_last_rendered_angles = (f32::NAN, f32::NAN, false); // force re-render
+                        self.state.icon_gen_status = Some("STL loaded.".to_string());
+                    }
+                    Err(e) => {
+                        self.state.stl_mesh = None;
+                        self.state.icon_gen_status = Some(format!("Error: {}", e));
+                    }
+                }
+                mesh_done = true;
+                ctx.request_repaint();
+            }
+        }
+        if mesh_done {
+            self.state.stl_mesh_loading = None;
+        }
+
+        // Re-render the STL preview texture if angles or up-axis changed.
+        if let Some(mesh) = &self.state.stl_mesh {
+            let cur = (
+                self.state.common.icon_stl_azimuth,
+                self.state.common.icon_stl_elevation,
+                self.state.common.icon_stl_z_up,
+            );
+            if cur != self.stl_last_rendered_angles {
+                let img = mesh.render(256, cur.0, cur.1, cur.2);
+                let size = [img.width() as usize, img.height() as usize];
+                let pixels = img.into_raw();
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
+                self.stl_preview_texture = Some(ctx.load_texture(
+                    "stl_preview",
+                    color_image,
+                    egui::TextureOptions::LINEAR,
+                ));
+                self.stl_last_rendered_angles = cur;
+            }
+        } else if self.stl_preview_texture.is_some() {
+            self.stl_preview_texture = None;
+            self.stl_last_rendered_angles = (f32::NAN, f32::NAN, false);
         }
 
         // Poll deploy result
@@ -264,6 +347,12 @@ impl eframe::App for StoreTemplateApp {
                             &mut self.state.icon_gen_receiver,
                             &mut self.state.icon_gen_status,
                             self.icon_texture.as_ref(),
+                            &mut self.state.translate_receiver,
+                            &mut self.state.translate_status,
+                            &mut self.state.stl_mesh,
+                            &mut self.state.stl_mesh_source,
+                            &mut self.state.stl_mesh_loading,
+                            self.stl_preview_texture.as_ref(),
                         );
                     }
                     Tab::Apple => {

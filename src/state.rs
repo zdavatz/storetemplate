@@ -2,8 +2,12 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use std::sync::mpsc;
+
 use crate::icon_gen::IconReceiver;
 use crate::deploy::DeployReceiver;
+use crate::stl_render::StlMesh;
+use crate::translate::TranslateReceiver;
 
 fn empty_lang_map() -> HashMap<String, String> {
     HashMap::new()
@@ -39,6 +43,15 @@ pub struct AppState {
     pub icon_gen_receiver: Option<IconReceiver>,
     pub icon_gen_status: Option<String>,
 
+    // Translation
+    pub translate_receiver: Option<TranslateReceiver>,
+    pub translate_status: Option<String>,
+
+    // STL mesh (cached after load; drives the interactive preview)
+    pub stl_mesh: Option<StlMesh>,
+    pub stl_mesh_source: String,
+    pub stl_mesh_loading: Option<mpsc::Receiver<Result<StlMesh, String>>>,
+
     // Deploy
     pub deploy_log: Vec<String>,
     pub deploy_running: bool,
@@ -70,6 +83,11 @@ impl Default for AppState {
             validation_errors: Vec::new(),
             icon_gen_receiver: None,
             icon_gen_status: None,
+            translate_receiver: None,
+            translate_status: None,
+            stl_mesh: None,
+            stl_mesh_source: String::new(),
+            stl_mesh_loading: None,
             deploy_log: Vec::new(),
             deploy_running: false,
             deploy_receiver: None,
@@ -108,6 +126,10 @@ pub struct CommonState {
     pub age_rating: usize,
     pub app_icon_path: String,
     pub icon_description: String,
+    pub icon_stl_path: String,
+    pub icon_stl_azimuth: f32,
+    pub icon_stl_elevation: f32,
+    pub icon_stl_z_up: bool,
 }
 
 impl Default for CommonState {
@@ -129,6 +151,10 @@ impl Default for CommonState {
             age_rating: 0,
             app_icon_path: String::new(),
             icon_description: String::new(),
+            icon_stl_path: String::new(),
+            icon_stl_azimuth: 30.0,
+            icon_stl_elevation: 25.0,
+            icon_stl_z_up: true,
         }
     }
 }
