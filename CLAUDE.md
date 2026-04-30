@@ -64,6 +64,93 @@ openssl pkcs12 -export -out mac_app.p12 -inkey mac_dist.key -in mac_app.pem -pas
 ```
 The `-legacy` flag is required for macOS `security import` compatibility.
 
+## Microsoft Store gotchas — submitting MSIX via the v1 devcenter API
+
+Compiled from the parados_rust v1.0.0 → v1.0.8 iteration cycle. Each one cost a release
+before we found it; copy these into any project that ships an MSIX through Partner Center.
+
+1. **`<Properties><DisplayName>` in AppxManifest.xml must match the Partner Center
+   reservation name verbatim** — including punctuation. A reservation called
+   `Parados - Think Ahead!` (with the `!`) requires that exact string in the manifest.
+   A short form like `Parados` triggers `Die Manifestdatei dieses Pakets verwendet
+   einen nicht reservierten Anzeigenamen`. The submission body's per-listing `title`
+   field has the same constraint.
+
+2. **`keywords` array is capped at 7 entries.** Longer arrays return
+   `The size of Keywords must be 7 or less`. Brand + category + 3-4 genre keywords is
+   the workable shape. (storetemplate's "search terms" field already enforces this.)
+
+3. **Category enum is `Games_<Genre>`**, not `GamesAndEntertainment_*`. The latter sounds
+   plausible but Microsoft rejects it with
+   `'GamesAndEntertainment_Strategy' is not a valid 'ApplicationCategory' value`.
+   Genres at https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/categories-and-subcategories?pivots=store-installer-msix
+   — `Games_CardAndBoard`, `Games_PuzzleAndTrivia`, `Games_Strategy` etc. Non-game
+   categories use the `<Category>_<Subcategory>` form (`BooksAndReference_EReader` etc.).
+
+4. **Pause 60 s between deleting a pending submission and creating a new one.**
+   Microsoft's backend takes ~20-30 s to fully clean up; create-too-soon makes the new
+   submission inherit the previous one's stuck state ("Angehalten" in Partner Center,
+   Microsoft's MSIX validator never picks the package up). 60 s is per-release overhead
+   that's trivial vs the cost of a stuck submission. The 2 s default in early workflow
+   templates was a footgun.
+
+5. **Set `targetDeviceFamilies` explicitly on the package metadata** instead of relying
+   on Microsoft auto-derive from the manifest. Format:
+   `"<Family> min version <Version>"`, e.g. `"Windows.Desktop min version 10.0.17763.0"`.
+   The auto-derive runs *after* upload — if it stalls, the package reads as "supports no
+   families" and the listing rejects with the misleading
+   `Sie müssen mindestens ein Paket hochladen` error.
+
+6. **Per-app device-family availability is set in the Partner Center web UI**, not via
+   the submission API. The default reservation often ships with Mobile + Xbox + Holographic
+   checked; uncheck them once at
+   `https://partner.microsoft.com/dashboard/products/<storeId>/properties` so submissions
+   don't fail with "Xbox-Gerätefamilie ein neutrales Paket erforderlich".
+   `allowTargetFutureDeviceFamilies` in the submission body is forward-looking only and
+   doesn't override this.
+
+7. **Stuck submissions need a manual Partner Center delete + a version bump.** If a
+   submission sits at "Angehalten" / "CommitStarted" longer than ~30 minutes with empty
+   `statusDetails.errors`, the workflow's automated delete-pending step is sometimes not
+   enough — Delete in the UI, then push `vX.Y.Z+1`. Microsoft's queue treats the previous
+   version as poisoned and won't re-process it.
+
+**Plus:** the v2 Submission API at `api.store.microsoft.com/submission/v1/...` is
+**MSI/EXE-only** — it returns `404 No Product Found` for MSIX product IDs. For MSIX
+always use the v1 devcenter API at `manage.devcenter.microsoft.com/v1.0/my/applications/...`
+(binary upload via Azure Blob SAS, listing fields via the per-locale `baseListing` block).
+
+## Listing copy: pull from the canonical store record
+
+For ywesee apps the **iOS App Store Connect record is the source of truth** for
+description / keywords / privacy URL / support URL / copyright. Mac App Store inherits via
+Universal Purchase; Microsoft Store gets it via the workflow. Don't hand-write listing
+copy in the workflow body — pull from App Store Connect via the API instead, so all
+storefronts stay in lockstep.
+
+One-paste Python snippet to dump the full iOS listing (every locale) using the
+`~/.apple/credentials.json` autofill source:
+
+```python
+import base64, json, os, time, subprocess, urllib.request
+cred = json.load(open(os.path.expanduser("~/.apple/credentials.json")))
+key_id, issuer = cred["apple"]["api_key_id"], cred["apple"]["api_issuer_id"]
+key_path = os.path.expanduser(cred["apple"]["api_key_path"])
+def b64u(d): return base64.urlsafe_b64encode(d).rstrip(b"=").decode()
+header  = {"alg":"ES256","kid":key_id,"typ":"JWT"}
+payload = {"iss":issuer,"iat":int(time.time()),"exp":int(time.time())+1200,"aud":"appstoreconnect-v1"}
+msg = b64u(json.dumps(header).encode()) + "." + b64u(json.dumps(payload).encode())
+sig = subprocess.check_output(["openssl","dgst","-sha256","-sign",key_path], input=msg.encode())
+i=2; lr=sig[i+1]; r=sig[i+2:i+2+lr].lstrip(b"\x00"); i+=2+lr; ls=sig[i+1]; s=sig[i+2:i+2+ls].lstrip(b"\x00")
+token = msg + "." + b64u(r.rjust(32,b"\x00") + s.rjust(32,b"\x00"))
+H = {"Authorization": f"Bearer {token}"}
+def get(p): return json.loads(urllib.request.urlopen(urllib.request.Request("https://api.appstoreconnect.apple.com" + p, headers=H), timeout=30).read())
+
+APP_ID = "<your numeric App Store Connect app id>"
+v = get(f"/v1/apps/{APP_ID}/appStoreVersions?filter[platform]=IOS&limit=5")["data"][0]["id"]
+print(json.dumps(get(f"/v1/appStoreVersions/{v}/appStoreVersionLocalizations"), indent=2, ensure_ascii=False))
+```
+
 ## Key Design Decisions
 
 - Common tab holds all shared fields (name, descriptions, keywords, URLs) — store tabs only have store-unique fields to avoid duplicate entry
